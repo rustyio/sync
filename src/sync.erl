@@ -24,7 +24,7 @@ go(Options) ->
     %% If Quickcheck is around, then define the EQC flag, that way you
     %% can have an "-ifdef(EQC)" statement.
     case code:ensure_loaded(eqc) of
-        {module, eqc} -> Options1 = [{d, "EQC"}, Options];
+        {module, eqc} -> Options1 = [{d, 'EQC'}, Options];
         _ -> Options1 = Options
     end,
 
