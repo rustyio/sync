@@ -21,11 +21,20 @@ go() ->
 %% @doc
 %% The specified Options are passed into make:all/1.
 go(Options) -> 
+    %% If Quickcheck is around, then define the EQC flag, that way you
+    %% can have an "-ifdef(EQC)" statement.
+    case code:ensure_loaded(eqc) of
+        {module, eqc} -> Options1 = [{d, "EQC"}, Options];
+        _ -> Options1 = Options
+    end,
+
+    %% Create a list of code directories, and then run make on all of
+    %% them.
     {ok, BaseDir} = file:get_cwd(),
     SubDirs = get_emakefiles_subdirs(),
     CodePathDirs = get_emakefiles_codepaths(),
     Directories = (SubDirs -- CodePathDirs) ++ CodePathDirs,
-    run_make_all(BaseDir, Directories, Options).
+    run_make_all(BaseDir, Directories, Options1).
 
 
 %% Get directories containing Emakefiles under the current
@@ -81,6 +90,8 @@ inner_run_make_all(BaseDir, [Dir|Dirs], Options) ->
     case filelib:is_file("./Emakefile") of
         true ->
             io:format(":: MAKE - ~s~n", [Dir]),
+
+            
 
             case make:all(Options) of
                 up_to_date -> 
