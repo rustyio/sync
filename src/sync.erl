@@ -24,7 +24,7 @@ go(Options) ->
     %% If Quickcheck is around, then define the EQC flag, that way you
     %% can have an "-ifdef(EQC)" statement.
     case code:ensure_loaded(eqc) of
-        {module, eqc} -> Options1 = [{d, 'EQC'}, Options];
+        {module, eqc} -> Options1 = [{d, 'EQC'}|Options];
         _ -> Options1 = Options
     end,
 
@@ -90,9 +90,6 @@ inner_run_make_all(BaseDir, [Dir|Dirs], Options) ->
     case filelib:is_file("./Emakefile") of
         true ->
             io:format(":: MAKE - ~s~n", [Dir]),
-
-            
-
             case make:all(Options) of
                 up_to_date -> 
                     inner_run_make_all(BaseDir, Dirs, Options);
