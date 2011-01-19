@@ -154,7 +154,7 @@ possibly_compile(Module) ->
                     put_cache({Module, warnings}, Warnings),
                     Msg = [
                         format_errors(File, Warnings, []),
-                        io_lib:format("~s:: Recompiled with ~p warnings~n", [File, length(Warnings)])
+                        io_lib:format("~s:0: Recompiled with ~p warnings~n", [File, length(Warnings)])
                     ],
                     log_sync_out_file(Msg),
                     error_logger:info_msg(Msg),
@@ -198,13 +198,13 @@ transform_options(Module, File, Options) ->
 %% Print error messages in a pretty and user readable way.
 format_errors(File, Warnings, Errors) ->
     AllErrors1 = lists:sort(lists:flatten([X || {_, X} <- Errors])),
-    AllErrors2 = [{Line, "error", Module, Description} || {Line, Module, Description} <- AllErrors1],
+    AllErrors2 = [{Line, "Error", Module, Description} || {Line, Module, Description} <- AllErrors1],
     AllWarnings1 = lists:sort(lists:flatten([X || {_, X} <- Warnings])),
-    AllWarnings2 = [{Line, "warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
+    AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
     F = fun({Line, Prefix, Module, ErrorDescription}) ->
         Msg = Module:format_error(ErrorDescription),
-        io_lib:format("~s:~p: (~s) ~s~n", [File, Line - 1, Prefix, Msg])
+        io_lib:format("~s:~p: ~s: ~s~n", [File, Line - 1, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
 
@@ -331,8 +331,9 @@ write_sync_out_file() ->
         Other -> 
             File = get_env(out_file, "/tmp/sync.out"),
             {{Y,M,D}, {HH,MM,SS}} = calendar:local_time(),
-            TS = io_lib:format("~nLast updated ~p-~p-~p ~p:~p:~p.", [Y, M, D, HH, MM, SS]),
-            ok = file:write_file(File, [Other, TS])
+            Header = "-*- mode: compilation; mode: auto-revert; buffer-read-only: true; auto-revert-interval: 0.1 -*-\n\n",
+            Footer = io_lib:format("~n - Updated ~5p-~p-~p ~p\:~p\:~p~n", [Y, M, D, HH, MM, SS]),
+            ok = file:write_file(File, [Header, Other, Footer])
     end.
 
 get_env(Var, Default) ->

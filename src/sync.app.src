@@ -1,11 +1,8 @@
 {application, sync, [
     {description, "Sync - Automatic Code Reloader"},
+    {applications, [kernel, stdlib]},
     {vsn, "0.1"},
     {registered, []},
-    {applications, [
-        kernel,
-        stdlib
-    ]},
     {mod, { sync, []}},
     {env, [
         {compile_inteval, 1000},
