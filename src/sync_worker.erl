@@ -331,8 +331,8 @@ write_sync_out_file() ->
         Other -> 
             File = get_env(out_file, "/tmp/sync.out"),
             {{Y,M,D}, {HH,MM,SS}} = calendar:local_time(),
-            Header = "-*- mode: compilation; mode: auto-revert; buffer-read-only: true; auto-revert-interval: 0.1 -*-\n\n",
-            Footer = io_lib:format("~n - Updated ~5p-~p-~p ~p\:~p\:~p~n", [Y, M, D, HH, MM, SS]),
+            Header = get_env(file_variables, ""),
+            Footer = io_lib:format("~n - Updated ~4.10.0b-~2.10.0b-~2.10.0b ~2.10.0b:~2.10.0b:~2.10.0b~n", [Y, M, D, HH, MM, SS]),
             ok = file:write_file(File, [Header, Other, Footer])
     end.
 

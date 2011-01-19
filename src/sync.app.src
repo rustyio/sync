@@ -5,7 +5,13 @@
     {registered, []},
     {mod, { sync, []}},
     {env, [
+        %% How often to compile (in MS).
         {compile_inteval, 1000},
+
+        %% http://www.gnu.org/software/emacs/manual/html_node/emacs/File-Variables.html#File-Variables
+        {file_variables, "-*- mode: compilation; mode: auto-revert; buffer-read-only: true; auto-revert-interval: 0.1 -*-\n\n"},
+
+        %% Temp file to write output messages.
         {out_file, "/tmp/sync.out"}
     ]}
 ]}.
