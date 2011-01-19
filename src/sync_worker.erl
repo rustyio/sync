@@ -116,6 +116,7 @@ possibly_compile(Module) ->
     %% If the file or one of it's dependencies has been modified, then recompile...
     case IsFileModified orelse IsIncludeModified of
         true ->
+            ?PRINT({Module, Options}),
             %% Old Errors and Old Warnings...
             OldErrors = get_cache({Module, errors}, []),
             OldWarnings = get_cache({Module, warnings}, []),
@@ -125,7 +126,7 @@ possibly_compile(Module) ->
                     put_cache({Module, errors}, []),
                     put_cache({Module, warnings}, []),
                     compile:file(File, Options),
-                    code:load_binary(Module, File, Binary),
+                    code:load_binary(Module, code:which(Module), Binary),
                     put_cache({Module, compile_info}, Module:module_info(compile)),
                     if
                         OldErrors /= [] orelse OldWarnings /= [] ->
@@ -158,7 +159,7 @@ possibly_compile(Module) ->
                     ],
                     log_sync_out_file(Msg),
                     error_logger:info_msg(Msg),
-                    code:load_binary(Module, File, Binary),
+                    code:load_binary(Module, code:which(Module), Binary),
                     put_cache({Module, compile_info}, Module:module_info(compile)),
                     ok;
                 {error, OldErrors, OldWarnings} ->

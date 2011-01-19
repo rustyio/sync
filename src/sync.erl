@@ -34,6 +34,7 @@ stop() ->
 
 
 start(_StartType, _StartArgs) ->
+    io:format("Starting Sync (Automatic Code Reloader)~n"),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
