@@ -116,7 +116,6 @@ possibly_compile(Module) ->
     %% If the file or one of it's dependencies has been modified, then recompile...
     case IsFileModified orelse IsIncludeModified of
         true ->
-            ?PRINT({Module, Options}),
             %% Old Errors and Old Warnings...
             OldErrors = get_cache({Module, errors}, []),
             OldWarnings = get_cache({Module, warnings}, []),
@@ -338,8 +337,10 @@ write_sync_out_file() ->
 
 get_env(Var, Default) ->
     case application:get_env(Var) of
-        undefined -> Default;
-        Other -> Other
+        {ok, Value} -> 
+            Value;
+        _ -> 
+            Default
     end.
         
 get_cache(Key, Default) when is_function(Default) ->
