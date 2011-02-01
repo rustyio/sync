@@ -332,7 +332,7 @@ write_sync_out_file() ->
             File = get_env(out_file, "/tmp/sync.out"),
             {{Y,M,D}, {HH,MM,SS}} = calendar:local_time(),
             Header = get_env(file_variables, ""),
-            Footer = io_lib:format("~n - Updated ~4.10.0b-~2.10.0b-~2.10.0b ~2.10.0b:~2.10.0b:~2.10.0b~n", [Y, M, D, HH, MM, SS]),
+            Footer = io_lib:format("~n- Updated ~4.10.0b-~2.10.0b-~2.10.0b ~2.10.0b:~2.10.0b:~2.10.0b~n", [Y, M, D, HH, MM, SS]),
             ok = file:write_file(File, [Header, Other, Footer])
     end.
 
