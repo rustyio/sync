@@ -80,7 +80,7 @@ possibly_compile(Module) ->
 
     %% Get some simple vars...
     File = proplists:get_value(source, CompileInfo),
-    IsFile = filelib:is_file(File),
+    IsFile = filelib:is_regular(File),
     CompileTime = module_compiled_time(Module),
     
     %% Get options...
