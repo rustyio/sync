@@ -89,9 +89,16 @@ possibly_compile(Module) ->
             CachedOptions;
         _ ->
             Options1 = proplists:get_value(options, CompileInfo, []),
-            Options2 = transform_options(Module, File, Options1),
-            put_cache({Module, options}, {CompileTime, Options2}),
-            Options2
+            Options2 = case code:ensure_loaded(eqc) of
+                {module, eqc} ->
+                    Options1 ++ [{d, 'EQC'}];
+                _ ->
+                    Options1
+            end,
+            Options3 = transform_options(Module, File, Options2),
+            Options4 = lists:usort(lists:flatten(Options3)),
+            put_cache({Module, options}, {CompileTime, Options4}),
+            Options4
     end,
 
     %% If the file exists, get the last modified time...
@@ -195,6 +202,7 @@ transform_options(Module, File, Options) ->
     end,
     lists:foldl(F, [], Options) ++ [{outdir, filename:dirname(code:which(Module))}].
 
+
 %% Print error messages in a pretty and user readable way.
 format_errors(File, Warnings, Errors) ->
     AllErrors1 = lists:sort(lists:flatten([X || {_, X} <- Errors])),
@@ -204,7 +212,7 @@ format_errors(File, Warnings, Errors) ->
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
     F = fun({Line, Prefix, Module, ErrorDescription}) ->
         Msg = Module:format_error(ErrorDescription),
-        io_lib:format("~s:~p: ~s: ~s~n", [File, Line - 1, Prefix, Msg])
+        io_lib:format("~s:~p: ~s: ~s~n", [File, Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
 
