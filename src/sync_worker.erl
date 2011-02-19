@@ -192,15 +192,20 @@ possibly_compile(Module) ->
 find_basedir(A, B) ->
     find_basedir(filename:split(A), filename:split(B), []).
 find_basedir([], _, Acc) ->
-    filename:join(lists:reverse(Acc));
+    find_basedir_acc(Acc);
 find_basedir(_, [], Acc) ->
-    filename:join(lists:reverse(Acc));
+    find_basedir_acc(Acc);
 find_basedir([A|As], [B|Bs], Acc) ->
     case A == B of
         true ->
             find_basedir(As, Bs, [A|Acc]);
         false ->
-            filename:join(lists:reverse(Acc))
+            find_basedir_acc(Acc)
+    end.
+find_basedir_acc(Acc) ->
+    case Acc of
+        [] -> ".";
+        _ -> filename:join(lists:reverse(Acc))
     end.
 
 %% Walk through each option. If it's an include or outdir option, then
