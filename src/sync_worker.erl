@@ -187,20 +187,38 @@ possibly_compile(Module) ->
             ok
     end.
 
+%% Find the common base directory between two different directories.
+%% Example: "/a/b/c/d/e", "/a/b/c/f/g/h" -> "/a/b/c"
+find_basedir(A, B) ->
+    find_basedir(filename:split(A), filename:split(B), []).
+find_basedir([], _, Acc) ->
+    filename:join(lists:reverse(Acc));
+find_basedir(_, [], Acc) ->
+    filename:join(lists:reverse(Acc));
+find_basedir([A|As], [B|Bs], Acc) ->
+    case A == B of
+        true ->
+            find_basedir(As, Bs, [A|Acc]);
+        false ->
+            filename:join(lists:reverse(Acc))
+    end.
+
 %% Walk through each option. If it's an include or outdir option, then
 %% rewrite the path...
 transform_options(Module, File, Options) ->
+    Outdir = filename:dirname(code:which(Module)),
+    Basedir = find_basedir(Outdir, filename:dirname(File)),
     F = fun(Option, Acc) ->
         case Option of
             {i, Dir} ->
-                [{i, filename:join([filename:dirname(File), "..", Dir])}|Acc];
+                [{i, filename:join(Basedir, Dir)}|Acc];
             {outdir, _Dir} ->
                 Acc;
             Other ->
                 [Other|Acc]
         end
     end,
-    lists:foldl(F, [], Options) ++ [{outdir, filename:dirname(code:which(Module))}].
+    lists:foldl(F, [], Options) ++ [{outdir, Outdir}].
 
 
 %% Print error messages in a pretty and user readable way.
