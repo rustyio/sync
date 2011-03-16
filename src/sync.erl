@@ -6,7 +6,7 @@
 -behaviour(supervisor).
 
 %% API.
--export ([go/0, stop/0]).
+-export ([go/0, stop/0, start/0]).
 
 %% Application Callbacks.
 -export([start/2, stop/1]).
@@ -27,6 +27,9 @@ go() ->
 
 stop() ->
     application:stop(sync).
+
+start() ->
+    application:start(sync).
 
 %% ----------------------------------------------------------------------
 %% Application Callbacks
