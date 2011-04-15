@@ -21,3 +21,13 @@ Simply:
 1. Open a `shell` or `eshell` buffer.
 2. `tail -f *` on your log directory.
 3. Turn on `compilation-minor-mode`.
+
+
+# New Solution
++ Create an index of every module in the system to every file on disk.
++ Using the modules, create an index of .hrl files to .beam files.
++ Create a list of unique directories in modules from previous step.
++ Create an index of every .hrl file in every directory, including the local directory. 
++ Create an index of every .erl file in every directory, including the local directory.
++ Check the last update time of each src file.
++ If it's newer than the module, then recompile.

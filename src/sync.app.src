@@ -5,8 +5,11 @@
     {registered, []},
     {mod, { sync, []}},
     {env, [
-        %% How often to compile (in MS).
-        {compile_inteval, 1000},
+        {discover_modules_interval, 30000},
+        {discover_src_dirs_interval, 30000},
+        {discover_src_files_interval, 5000},
+        {compare_beams_interval, 2000},
+        {compare_src_files_interval, 1000},
 
         %% http://www.gnu.org/software/emacs/manual/html_node/emacs/File-Variables.html#File-Variables
         {file_variables, "-*- mode: compilation; mode: auto-revert; buffer-read-only: true; auto-revert-interval: 0.5 -*-\n\n"},
