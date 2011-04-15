@@ -5,7 +5,8 @@
 
 %% API
 -export([
-    start_link/0
+    start_link/0,
+    rescan/0
 ]).
 
 %% gen_server callbacks
@@ -33,16 +34,21 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-init([]) ->
-    %% Trap exits to catch failing processes...
-    erlang:process_flag(trap_exit, true),
-
-    %% Kick off the discovery process...
+rescan() ->
+    io:format("Scanning source files...~n"),
     gen_server:cast(?SERVER, discover_modules),
     gen_server:cast(?SERVER, discover_src_dirs),
     gen_server:cast(?SERVER, discover_src_files),
     gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
+    ok.
+
+init([]) ->
+    %% Trap exits to catch failing processes...
+    erlang:process_flag(trap_exit, true),
+
+    %% Kick off the discovery process...
+    rescan(),
 
     %% Create the state and return...
     State = #state {

@@ -8,6 +8,7 @@
 
 %% API.
 -export ([
+    start/0,
     go/0, 
     stop/0
 ]).
@@ -27,8 +28,12 @@
 %% API 
 %% ----------------------------------------------------------------------
 
-go() ->
+start() ->
     application:start(sync).
+
+go() ->
+    application:start(sync),
+    sync_scanner:rescan().
 
 stop() ->
     application:stop(sync).
