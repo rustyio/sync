@@ -6,7 +6,8 @@
 %% API
 -export([
     start_link/0,
-    rescan/0
+    rescan/0,
+    info/0
 ]).
 
 %% gen_server callbacks
@@ -41,6 +42,11 @@ rescan() ->
     gen_server:cast(?SERVER, discover_src_files),
     gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
+    ok.
+
+info() ->
+    io:format("Sync Info...~n"),
+    gen_server:cast(?SERVER, info),
     ok.
 
 init([]) ->
@@ -156,6 +162,12 @@ handle_cast(compare_src_files, State) ->
     NewState = State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers },
     {noreply, NewState};
 
+handle_cast(info, State) ->
+    io:format("Modules: ~p~n", [State#state.modules]),
+    io:format("Source Dirs: ~p~n", [State#state.src_dirs]),
+    io:format("Source Files: ~p~n", [State#state.src_files]),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -196,6 +208,7 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2]) ->
     %% Print a status message...
     Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
     error_logger:info_msg("~s", [Msg]),
+    growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
     process_beam_lastmod(T1, T2);
 process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2]) ->
     %% Lists are different, advance the smaller one...
@@ -283,12 +296,14 @@ print_results(SrcFile, [], Warnings) ->
         format_errors(SrcFile, [], Warnings),
         io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
+    growl("warnings", "Warnings...", growl_format_errors([], Warnings)),
     error_logger:info_msg("~s", [Msg]);
     
 print_results(SrcFile, Errors, Warnings) ->
     Msg = [
         format_errors(SrcFile, Errors, Warnings)
     ],
+    growl("errors", "Errors...", growl_format_errors(Errors, Warnings)),
     error_logger:info_msg("~s", [Msg]).
 
 
@@ -304,3 +319,21 @@ format_errors(File, Errors, Warnings) ->
         io_lib:format("~s:~p: ~s: ~s~n", [File, Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
+
+%% @private Print error messages in a pretty and user readable way.
+growl_format_errors(Errors, Warnings) ->
+    AllErrors1 = lists:sort(lists:flatten([X || {_, X} <- Errors])),
+    AllErrors2 = [{Line, "Error", Module, Description} || {Line, Module, Description} <- AllErrors1],
+    AllWarnings1 = lists:sort(lists:flatten([X || {_, X} <- Warnings])),
+    AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
+    Everything = lists:sort(AllErrors2 ++ AllWarnings2),
+    F = fun({Line, Prefix, Module, ErrorDescription}) ->
+        Msg = Module:format_error(ErrorDescription),
+        io_lib:format("~p: ~s: ~s~n", [Line, Prefix, Msg])
+    end,
+    [F(X) || X <- Everything].
+
+growl(Image, Title, Message) ->
+    ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
+    Msg = io_lib:format("growlnotify -n \"Sync\" --image \"~s\" -m \"~s\" \"~s\"", [ImagePath, Message, Title]),
+    os:cmd(Msg).

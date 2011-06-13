@@ -4,12 +4,12 @@
 -module (sync).
 -behaviour(application).
 -behaviour(supervisor).
--compile(export_all).
 
 %% API.
 -export ([
     start/0,
     go/0, 
+    info/0,
     stop/0
 ]).
 
@@ -35,11 +35,11 @@ go() ->
     application:start(sync),
     sync_scanner:rescan().
 
+info() ->
+    sync_scanner:info().
+
 stop() ->
     application:stop(sync).
-
-test() -> 
-    ok.
 
 
 %% ----------------------------------------------------------------------
