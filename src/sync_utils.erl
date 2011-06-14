@@ -13,10 +13,14 @@
 get_src_dir_from_module(Module)->
     case code:is_loaded(Module) of
         {file, _} ->
-            Props = Module:module_info(compile),
-            Source = proplists:get_value(source, Props, ""),
-            Dir = filename:dirname(Source),
-            get_src_dir(Dir);
+            try
+                Props = Module:module_info(compile),
+                Source = proplists:get_value(source, Props, ""),
+                Dir = filename:dirname(Source),
+                get_src_dir(Dir)
+            catch _ : _ ->
+                    undefined
+            end;
         _ ->
             undefined
     end.
@@ -24,8 +28,12 @@ get_src_dir_from_module(Module)->
 get_options_from_module(Module) ->
     case code:is_loaded(Module) of
         {file, _} ->
-            Props = Module:module_info(compile),
-            {ok, proplists:get_value(options, Props, [])};
+            try
+                Props = Module:module_info(compile),
+                {ok, proplists:get_value(options, Props, [])}
+            catch _ : _ ->
+                    undefined 
+            end;
         _ ->
             {ok, []}
     end.
