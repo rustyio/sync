@@ -32,8 +32,12 @@ start() ->
     application:start(sync).
 
 go() ->
-    application:start(sync),
-    sync_scanner:rescan().
+    case application:start(sync) of
+        ok -> 
+            ok;
+        {error, {already_started, sync}} ->
+            sync_scanner:rescan()
+    end.
 
 info() ->
     sync_scanner:info().
