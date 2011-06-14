@@ -269,7 +269,7 @@ recompile_src_file(SrcFile) ->
     case compile:file(SrcFile, [binary, return|Options]) of
         {ok, Module, OldBinary, Warnings} ->
             %% Compiling didn't change the beam code. Don't reload...
-            print_results(SrcFile, [], Warnings),
+            print_results(Module, SrcFile, [], Warnings),
             {ok, [], Warnings};
 
         {ok, Module, _Binary, Warnings} ->
@@ -278,28 +278,34 @@ recompile_src_file(SrcFile) ->
             gen_server:cast(?SERVER, compare_beams),
 
             %% Print the warnings...
-            print_results(SrcFile, [], Warnings),
+            print_results(Module, SrcFile, [], Warnings),
             {ok, [], Warnings};
 
         {error, Errors, Warnings} ->
             %% Compiling failed. Print the warnings and errors...
-            print_results(SrcFile, Errors, Warnings),
+            print_results(Module, SrcFile, Errors, Warnings),
             {ok, Errors, Warnings}
     end.
 
-print_results(SrcFile, [], []) ->
+print_results(Module, SrcFile, [], []) ->
     Msg = io_lib:format("~s:0: Recompiled.~n", [SrcFile]),
+    case code:is_loaded(Module) of
+        {file, _} -> 
+            ok;
+        false ->
+            growl("success", "Success!", "Recompiled " ++ SrcFile ++ ".")
+    end,
     error_logger:info_msg("~s", [Msg]);
 
-print_results(SrcFile, [], Warnings) ->
+print_results(_Module, SrcFile, [], Warnings) ->
     Msg = [
         format_errors(SrcFile, [], Warnings),
         io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
-    growl("warnings", "Warnings...", growl_format_errors([], Warnings)),
+    growl("warnings", "Warnings", growl_format_errors([], Warnings)),
     error_logger:info_msg("~s", [Msg]);
     
-print_results(SrcFile, Errors, Warnings) ->
+print_results(_Module, SrcFile, Errors, Warnings) ->
     Msg = [
         format_errors(SrcFile, Errors, Warnings)
     ],
