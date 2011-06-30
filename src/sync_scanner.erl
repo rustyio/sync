@@ -56,6 +56,9 @@ init([]) ->
     %% Kick off the discovery process...
     rescan(),
 
+    %% Display startup message...
+    growl("success", "Sync", "The Sync utility is now running."),
+
     %% Create the state and return...
     State = #state {
         modules = [],
