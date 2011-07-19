@@ -116,7 +116,7 @@ handle_cast(discover_src_dirs, State) ->
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\.erl$") ++ Acc
+        sync_utils:wildcard(X, ".*\.erl\$") ++ Acc
     end,
     Files = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
