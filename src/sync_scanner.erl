@@ -200,6 +200,21 @@ schedule_cast(Msg, Default, Timers) ->
     %% Return the new timers structure...
     lists:keystore(Msg, 1, Timers, {Msg, NewTRef}).
 
+try_test(Module) ->
+    try_test(Module, erlang:function_exported(Module, test, 0)).
+
+try_test(Module, true) ->
+    io:format(" - Calling ~p:test() ...", [Module]),
+    case catch Module:test() of
+        ok ->
+            io:format(" ok.~n"),
+            test_ok;
+        Reason ->
+            io:format(" fail: ~p.~n", [Reason]),
+            test_failed
+    end;
+try_test(_Module, false) -> no_test_found.
+
 process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2]) ->
     %% Beam hasn't changed, do nothing...
     process_beam_lastmod(T1, T2);
@@ -212,6 +227,7 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2]) ->
     Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
     error_logger:info_msg("~s", [Msg]),
     growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
+    try_test(Module),
     process_beam_lastmod(T1, T2);
 process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2]) ->
     %% Lists are different, advance the smaller one...
