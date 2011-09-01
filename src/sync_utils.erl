@@ -32,22 +32,23 @@ get_options_from_module(Module) ->
                 Props = Module:module_info(compile),
                 {ok, proplists:get_value(options, Props, [])}
             catch _ : _ ->
-                    undefined 
+                    undefined
             end;
         _ ->
             {ok, []}
     end.
-    
+
 
 get_src_dir(Dir) when Dir == ""; Dir == "/"; Dir == "." ->
     undefined;
 get_src_dir(Dir) ->
-    IsCodeDir = filelib:is_dir(filename:join(Dir, "src")) 
-        orelse filelib:is_dir(filename:join(Dir, "ebin")) 
-        orelse filelib:is_dir(filename:join(Dir, "include")),
-    case IsCodeDir of
-        true -> 
-            {ok, filename:join(Dir, "src")};
+    HasCode =
+        filelib:wildcard("*.erl", Dir) /= [] orelse
+        filelib:wildcard("*.hrl", Dir) /= [],
+
+    case HasCode of
+        true ->
+            {ok, Dir};
         false ->
             get_src_dir(filename:dirname(Dir))
     end.
@@ -59,9 +60,9 @@ wildcard(Dir, Regex) ->
 %% @private Get an environment variable.
 get_env(Var, Default) ->
     case application:get_env(Var) of
-        {ok, Value} -> 
+        {ok, Value} ->
             Value;
-        _ -> 
+        _ ->
             Default
     end.
 
@@ -87,7 +88,9 @@ transform_options(SrcDir, Options) ->
                 [Other|Acc]
         end
     end,
-    BinDir = filename:join([SrcDir, "..", "ebin"]),
+
+    LastPart = hd(lists:reverse(filename:split(proplists:get_value(outdir, Options, "./ebin")))),
+    BinDir = filename:join([SrcDir, "..", LastPart]),
     lists:foldl(F, [], Options) ++ [{outdir, BinDir}].
 
 
@@ -96,10 +99,10 @@ transform_options(SrcDir, Options) ->
 %% than whatever application we may be running.
 get_system_modules() ->
     Apps = [
-        appmon, 
-        asn1, 
+        appmon,
+        asn1,
         common_test,
-        compiler, 
+        compiler,
         crypto,
         debugger,
         dialyzer,
@@ -115,20 +118,20 @@ get_system_modules() ->
         inets,
         inviso,
         jinterface,
-        kernel, 
+        kernel,
         mnesia,
         observer,
-        orber, 
+        orber,
         os_mon,
         parsetools,
         percept,
         pman,
         reltool,
         runtime_tools,
-        sasl, 
+        sasl,
         snmp,
         ssl,
-        stdlib, 
+        stdlib,
         syntax_tools,
         test_server,
         toolbar,
@@ -146,4 +149,3 @@ get_system_modules() ->
         end
     end,
     lists:flatten([F(X) || X <- Apps]).
-

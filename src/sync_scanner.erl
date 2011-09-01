@@ -12,18 +12,18 @@
 
 %% gen_server callbacks
 -export([
-    init/1, 
-    handle_call/3, 
-    handle_cast/2, 
+    init/1,
+    handle_call/3,
+    handle_cast/2,
     handle_info/2,
-    terminate/2, 
+    terminate/2,
     code_change/3
 ]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 -define(PRINT(Var), io:format("DEBUG: ~p:~p - ~p~n~n ~p~n~n", [?MODULE, ?LINE, ??Var, Var])).
 
--record(state, { 
+-record(state, {
     modules,
     src_dirs,
     src_files,
@@ -80,7 +80,7 @@ handle_cast(discover_modules, State) ->
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_modules, 30000, State#state.timers),
-    
+
     %% Return with updated modules...
     NewState = State#state { modules=Modules, timers=NewTimers },
     {noreply, NewState};
@@ -108,7 +108,7 @@ handle_cast(discover_src_dirs, State) ->
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
-    
+
     %% Return with updated dirs...
     NewState = State#state { src_dirs=Dirs, timers=NewTimers },
     {noreply, NewState};
@@ -122,7 +122,7 @@ handle_cast(discover_src_files, State) ->
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_files, 5000, State#state.timers),
-    
+
     %% Return with updated files...
     NewState = State#state { src_files=Files, timers=NewTimers },
     {noreply, NewState};
@@ -135,14 +135,14 @@ handle_cast(compare_beams, State) ->
         {X, LastMod}
     end,
     NewBeamLastMod = lists:usort([F(X) || X <- State#state.modules]),
-    
+
     %% Compare to previous results, if there are changes, then reload
     %% the beam...
     process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod),
-    
+
     %% Schedule the next interval...
     NewTimers = schedule_cast(compare_beams, 2000, State#state.timers),
-    
+
     %% Return with updated beam lastmod...
     NewState = State#state { beam_lastmod=NewBeamLastMod, timers=NewTimers },
     {noreply, NewState};
@@ -154,13 +154,13 @@ handle_cast(compare_src_files, State) ->
         {X, LastMod}
     end,
     NewSrcFileLastMod = lists:usort([F(X) || X <- State#state.src_files]),
-    
+
     %% Compare to previous results, if there are changes, then recompile the file...
     process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod),
-    
+
     %% Schedule the next interval...
     NewTimers = schedule_cast(compare_src_files, 1000, State#state.timers),
-    
+
     %% Return with updated src_file lastmod...
     NewState = State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers },
     {noreply, NewState};
@@ -189,11 +189,11 @@ schedule_cast(Msg, Default, Timers) ->
     %% Cancel the old timer...
     TRef = proplists:get_value(Msg, Timers),
     timer:cancel(TRef),
-    
+
     %% Lookup the interval...
     IntervalKey = list_to_atom(atom_to_list(Msg) ++ "_interval"),
     Interval = sync_utils:get_env(IntervalKey, Default),
-    
+
     %% Schedule the call...
     {ok, NewTRef} = timer:apply_after(Interval, gen_server, cast, [?SERVER, Msg]),
 
@@ -207,10 +207,10 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2]) ->
     %% Beam has changed, reload...
     {Module, Binary, Filename} = code:get_object_code(Module),
     code:load_binary(Module, Filename, Binary),
-    
+
     %% Print a status message...
     Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
-    error_logger:info_msg("~s", [Msg]),
+    error_logger:info_msg(lists:flatten(Msg)),
     growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
     process_beam_lastmod(T1, T2);
 process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2]) ->
@@ -262,7 +262,7 @@ recompile_src_file(SrcFile) ->
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
     {ok, Options} = sync_options:get_options(SrcDir),
-    
+
     %% Get the old binary code...
     OldBinary = case code:get_object_code(Module) of
         {Module, B, _Filename} -> B;
@@ -293,12 +293,12 @@ recompile_src_file(SrcFile) ->
 print_results(Module, SrcFile, [], []) ->
     Msg = io_lib:format("~s:0: Recompiled.~n", [SrcFile]),
     case code:is_loaded(Module) of
-        {file, _} -> 
+        {file, _} ->
             ok;
         false ->
             growl("success", "Success!", "Recompiled " ++ SrcFile ++ ".")
     end,
-    error_logger:info_msg("~s", [Msg]);
+    error_logger:info_msg(lists:flatten(Msg));
 
 print_results(_Module, SrcFile, [], Warnings) ->
     Msg = [
@@ -306,14 +306,14 @@ print_results(_Module, SrcFile, [], Warnings) ->
         io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
     growl("warnings", "Warnings", growl_format_errors([], Warnings)),
-    error_logger:info_msg("~s", [Msg]);
-    
+    error_logger:info_msg(lists:flatten(Msg));
+
 print_results(_Module, SrcFile, Errors, Warnings) ->
     Msg = [
         format_errors(SrcFile, Errors, Warnings)
     ],
     growl("errors", "Errors...", growl_format_errors(Errors, Warnings)),
-    error_logger:info_msg("~s", [Msg]).
+    error_logger:info_msg(lists:flatten(Msg)).
 
 
 %% @private Print error messages in a pretty and user readable way.

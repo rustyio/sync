@@ -2,7 +2,7 @@
 
 ## What is it?
 
-Sync is an Erlang utility that helps you code faster by automatically compiling and hot-loading code into a running system. 
+Sync is an Erlang utility that helps you code faster by automatically compiling and hot-loading changed code.
 
 ## How can I use sync?
 
