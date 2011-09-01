@@ -14,8 +14,15 @@ get_src_dir_from_module(Module)->
     case code:is_loaded(Module) of
         {file, _} ->
             try
+                %% Get some module info...
                 Props = Module:module_info(compile),
                 Source = proplists:get_value(source, Props, ""),
+
+                %% Ensure that the file exists...
+                filelib:is_regular(Source) orelse
+                    throw(not_found),
+
+                %% Get the source dir...
                 Dir = filename:dirname(Source),
                 get_src_dir(Dir)
             catch _ : _ ->
