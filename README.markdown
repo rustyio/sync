@@ -33,7 +33,7 @@ If you are running sync with the [Nitrogen Web Framework](http://www.nitrogenpro
 
 ## Growl Notifications
 
-If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results:
+If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results.  This will also work on Linux if you have **notify-send** (Fedora: `libnotify` package, Ubuntu: `libnotify-bin` package):
 
 Successful compilation:
 
