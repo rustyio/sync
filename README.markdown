@@ -26,7 +26,7 @@ The scanning process adds 1% to 2% CPU load on a running Erlang VM. Much care ha
 
 ## Growl Notifications
 
-If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results:
+If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results.  This will also work on Linux if you have **notify-send** (Fedora: `libnotify` package, Ubuntu: `libnotify-bin` package):
 
 Successful compilation:
 
