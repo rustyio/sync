@@ -24,9 +24,16 @@ Sync also periodically checks the last modified date of any beam files, and auto
 
 The scanning process adds 1% to 2% CPU load on a running Erlang VM. Much care has been taken to keep this low. Shouldn't have to say this, but this is for development mode only, don't run it in production.
 
+## Using it with Nitrogen
+
+If you are running sync with the [Nitrogen Web Framework](http://www.nitrogenproject.com), be sure to add the following line to your etc/vm.args file:
+
+    -sync sync_mode nitrogen
+
+
 ## Growl Notifications
 
-If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results:
+If you are running a Mac and have [Growl](http://growl.info) and the **growlnotify** utility installed, Sync will pop up Growl notifications with compilation results.  This will also work on Linux if you have **notify-send** (Fedora: `libnotify` package, Ubuntu: `libnotify-bin` package):
 
 Successful compilation:
 

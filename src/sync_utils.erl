@@ -46,19 +46,39 @@ get_options_from_module(Module) ->
     end.
 
 
-get_src_dir(Dir) when Dir == ""; Dir == "/"; Dir == "." ->
-    undefined;
+%% @private Find the src directory for the specified Directory
 get_src_dir(Dir) ->
+    Mode = get_env(sync_mode,normal),
+    get_src_dir(Mode,Dir).
+
+get_src_dir(_,Dir) when Dir == ""; Dir == "/"; Dir == "." ->
+    undefined;
+ 
+%% @private Find's the src directory for the directory using the normal method or the original method which is compatible with Nitrogen
+%% Will drop back in the directory tree until it finds either a src, ebin, or include directory and return the parent directory with "src" appended
+get_src_dir(nitrogen,Dir) ->
+    IsCodeDir = filelib:is_dir(filename:join(Dir, "src")) 
+        orelse filelib:is_dir(filename:join(Dir, "ebin")) 
+        orelse filelib:is_dir(filename:join(Dir, "include")),
+
+    if
+        IsCodeDir -> 
+            {ok, filename:join(Dir, "src")};
+        true -> get_src_dir(nitrogen,filename:dirname(Dir))
+    end;
+
+%% Normal method is smarter and returns exactly any path that has .erl or .hrl files in it
+%% With Nitrogen, or any structure in which -include("something.hrl") specifies an implied directory, this will give "unable to find include file" errors
+get_src_dir(normal,Dir) ->
     HasCode =
         filelib:wildcard("*.erl", Dir) /= [] orelse
         filelib:wildcard("*.hrl", Dir) /= [],
-
-    case HasCode of
-        true ->
-            {ok, Dir};
-        false ->
-            get_src_dir(filename:dirname(Dir))
-    end.
+        if
+            HasCode -> {ok,Dir};
+            true -> get_src_dir(filename:dirname(Dir))
+        end;
+get_src_dir(OtherMode,_Dir) ->
+    throw({unknown_mode,OtherMode}).
 
 %% @private Return all files in a directory matching a regex.
 wildcard(Dir, Regex) ->
