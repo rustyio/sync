@@ -142,7 +142,7 @@ production.
 
 If you are running sync with the [Nitrogen Web Framework](http://www.nitrogenproject.com), be sure to add the following line to your etc/vm.args file:
 
-```txt
+```
 -sync sync_mode nitrogen
 ```
 
