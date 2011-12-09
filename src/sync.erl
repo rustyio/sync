@@ -10,7 +10,8 @@
     start/0,
     go/0, 
     info/0,
-    stop/0
+    stop/0,
+	growl/1,growl/0
 ]).
 
 %% Application Callbacks.
@@ -45,6 +46,11 @@ info() ->
 stop() ->
     application:stop(sync).
 
+growl(Val) when is_boolean(Val) ->
+	sync_scanner:set_growl(Val).
+
+growl() ->
+	sync_scanner:get_growl().
 
 %% ----------------------------------------------------------------------
 %% Application Callbacks
