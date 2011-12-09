@@ -189,7 +189,7 @@ handle_cast(compare_src_files, State) ->
     NewSrcFileLastMod = lists:usort([F(X) || X <- State#state.src_files]),
 
     %% Compare to previous results, if there are changes, then recompile the file...
-    process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod),
+    process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod, State#state.patching),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(compare_src_files, 1000, State#state.timers),
@@ -249,8 +249,8 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching) ->
     %% erlang VMs, and save the compiled beam to disk.
     case EnablePatching of
         true ->
-            load_module_on_all_nodes(Module),
-            NumNodes = length(nodes()) + 1,
+            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
+            {ok, NumNodes} = load_module_on_all_nodes(Module),
             Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
             error_logger:info_msg(lists:flatten(Msg)),
             growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
@@ -279,56 +279,62 @@ process_beam_lastmod(undefined, _Other, _) ->
     ok.
 
 load_module_on_all_nodes(Module) ->
+    %% Get a list of nodes known by this node, plus all attached
+    %% nodes.
+    Nodes = lists:usort(lists:flatten(nodes() ++ [rpc:call(X, erlang, nodes, []) || X <- nodes()])) -- [node()],
+    io:format("[~s:~p] DEBUG - Nodes: ~p~n", [?MODULE, ?LINE, Nodes]),
+    NumNodes = length(Nodes),
+
     {Module, Binary, _} = code:get_object_code(Module),
     F = fun(Node) ->
+        io:format("[~s:~p] DEBUG - Node: ~p~n", [?MODULE, ?LINE, Node]),
+        error_logger:info_msg("Reloading '~s' on ~s.~n", [Module, Node]),
         rpc:call(Node, code, ensure_loaded, [Module]),
         case rpc:call(Node, code, which, [Module]) of
-            undefined ->
-                %% File doesn't exist, just load into VM.
-                {module, Module} = rpc:call(Node, code, load_binary, [Module, undefined, Binary]);
-            Filename ->
+            Filename when is_binary(Filename) orelse is_list(Filename) ->
                 %% File exists, overwrite and load into VM.
-                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
                 ok = rpc:call(Node, file, write_file, [Filename, Binary]),
-                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
                 rpc:call(Node, code, purge, [Module]),
-                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
-                {module, Module} = rpc:call(Node, code, load_file, [Module])
-        end
+                {module, Module} = rpc:call(Node, code, load_file, [Module]);
+            _ ->
+                %% File doesn't exist, just load into VM.
+                {module, Module} = rpc:call(Node, code, load_binary, [Module, undefined, Binary])
+        end,
+        growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ " on " ++ atom_to_list(Node) ++ ".")
     end,
-    [F(X) || X <- nodes()],
-    ok.
+    [F(X) || X <- Nodes],
+    {ok, NumNodes}.
 
-process_src_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2]) ->
+process_src_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], EnablePatching) ->
     %% Beam hasn't changed, do nothing...
-    process_src_file_lastmod(T1, T2);
-process_src_file_lastmod([{File, _}|T1], [{File, _}|T2]) ->
+    process_src_file_lastmod(T1, T2, EnablePatching);
+process_src_file_lastmod([{File, _}|T1], [{File, _}|T2], EnablePatching) ->
     %% File has changed, recompile...
-    recompile_src_file(File),
-    process_src_file_lastmod(T1, T2);
-process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2]) ->
+    recompile_src_file(File, EnablePatching),
+    process_src_file_lastmod(T1, T2, EnablePatching);
+process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], EnablePatching) ->
     %% Lists are different...
     case File1 < File2 of
         true ->
             %% File was removed, do nothing...
-            process_src_file_lastmod(T1, [{File2, LastMod2}|T2]);
+            process_src_file_lastmod(T1, [{File2, LastMod2}|T2], EnablePatching);
         false ->
             %% File is new, recompile...
-            recompile_src_file(File2),
-            process_src_file_lastmod([{File1, LastMod1}|T1], T2)
+            recompile_src_file(File2, EnablePatching),
+            process_src_file_lastmod([{File1, LastMod1}|T1], T2, EnablePatching)
     end;
-process_src_file_lastmod([], [{File, _LastMod}|T2]) ->
+process_src_file_lastmod([], [{File, _LastMod}|T2], EnablePatching) ->
     %% File is new, recompile...
-    recompile_src_file(File),
-    process_src_file_lastmod([], T2);
-process_src_file_lastmod([], []) ->
+    recompile_src_file(File, EnablePatching),
+    process_src_file_lastmod([], T2, EnablePatching);
+process_src_file_lastmod([], [], _) ->
     %% Done.
     ok;
-process_src_file_lastmod(undefined, _Other) ->
+process_src_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
     ok.
 
-recompile_src_file(SrcFile) ->
+recompile_src_file(SrcFile, EnablePatching) ->
     %% Get the module, src dir, and options...
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
@@ -349,6 +355,10 @@ recompile_src_file(SrcFile) ->
         {ok, Module, _Binary, Warnings} ->
             %% Compiling changed the beam code. Compile and reload.
             compile:file(SrcFile, Options),
+            case EnablePatching of
+                true -> code:ensure_loaded(Module);
+                false -> ok
+            end,
             gen_server:cast(?SERVER, compare_beams),
 
             %% Print the warnings...

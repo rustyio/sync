@@ -8,9 +8,11 @@ Sync is an Erlang utility that helps you code faster by automatically compiling 
 
 The recommended approach is to put sync in your $ERL_LIBS directory.
 
-    cd $ERL_LIBS
-    git clone git@github.com:rustyio/sync.git
-    (cd sync; make)
+```bash
+cd $ERL_LIBS
+git clone git@github.com:rustyio/sync.git
+(cd sync; make)
+```
 
 Then, go in the Erlang console of an application you are developing, run `sync:go().`. You can also start sync using `application:start(sync).`
 
@@ -28,7 +30,9 @@ The scanning process adds 1% to 2% CPU load on a running Erlang VM. Much care ha
 
 If you are running sync with the [Nitrogen Web Framework](http://www.nitrogenproject.com), be sure to add the following line to your etc/vm.args file:
 
-    -sync sync_mode nitrogen
+```txt
+-sync sync_mode nitrogen
+```
 
 
 ## Growl Notifications
@@ -55,9 +59,34 @@ If you find the Growl/notify-send notifications annoying, you can choose to disa
 
     erl -sync growl false
     erl -sync growl true   #this is the default
-    
+
 
 #### 2. From within the Erlang shell:
 
     sync:growl(true).    % Enable notifications
     sync:growl(false).   % Disable notifications
+
+## Remote Server "Patching"
+
+If you are developing an application that runs on an Erlang cluster,
+you may need to recompile a module on one node, and then broadcast the
+changed module to other nodes. Sync helps you do that with a feature
+called "patching."
+
+To use the patching feature:
+
+1. Connect to any machine in your cluster via distributed
+erlang. A simple `net_adm:ping(Node)` should suffice.
+
+2. Run `sync:patch()`. This will start the Sync application if it's not
+already started, and enable "patch mode".
+
+3. Start editing code.
+
+Sync will detect changes to code, recompile your modules, and then
+sent the updated modules to every Erlang node connected to your
+cluster. If the module already exists on the node, then it will be
+overwritten on disk with the new .beam file and reloaded. If the
+module doesn't exist on the new node, then it is simply updated in
+memory.
+
