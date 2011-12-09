@@ -51,12 +51,13 @@ Errors:
 
 If you find the Growl/notify-send notifications annoying, you can choose to disable them with two ways:
 
-#### 1) As an environment variable called from the command line:
+#### 1. As an environment variable called from the erlang command line:
 
-    -sync growl false
-    -sync growl true   #this is the default
+    erl -sync growl false
+    erl -sync growl true   #this is the default
+    
 
-#### 2) From within the Erlang shell:
+#### 2. From within the Erlang shell:
 
     sync:growl(true).    % Enable notifications
     sync:growl(false).   % Disable notifications
