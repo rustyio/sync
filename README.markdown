@@ -29,7 +29,7 @@ run `sync:go().`. You can also start sync using
 
 Starting up:
 
-```txt
+```
 (rustyio@127.0.0.1)6> sync:go().
 
 Starting Sync (Automatic Code Compiler / Reloader)
@@ -40,20 +40,20 @@ ok
 
 Successfully recompiling a module:
 
-```txt
+```
 08:34:43.255 [info] /Code/Webmachine/src/webmachine_dispatcher.erl:0: Recompiled.
 08:34:43.265 [info] webmachine_dispatcher: Reloaded! (Beam changed.)
 ```
 
 Warnings:
 
-```txt
+```
 08:35:06.660 [info] /Code/Webmachine/src/webmachine_dispatcher.erl:33: Warning: function dispatch/3 is unused
 ```
 
 Errors:
 
-```txt
+```
 08:35:16.881 [info] /Code/Webmachine/src/webmachine_dispatcher.erl:196: Error: function reconstitute/1 undefined
 /Code/Webmachine/src/webmachine_dispatcher.erl:250: Error: syntax error before: reconstitute
 ```
