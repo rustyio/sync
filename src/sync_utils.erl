@@ -5,6 +5,7 @@
          get_src_dir/1,
          wildcard/2,
          get_env/2,
+         set_env/2,
          file_last_modified_time/1,
          transform_options/2,
          get_system_modules/0
@@ -92,6 +93,10 @@ get_env(Var, Default) ->
         _ ->
             Default
     end.
+
+%% @private Set a sync environment variable.
+set_env(Var,Val) ->
+    ok = application:set_env(sync,Var,Val).
 
 %% @private Return the time a file was modified.
 file_last_modified_time(File) ->

@@ -18,7 +18,9 @@
     handle_cast/2,
     handle_info/2,
     terminate/2,
-    code_change/3
+    code_change/3,
+    set_growl/1,
+    get_growl/0
 ]).
 
 -define(SERVER, ?MODULE).
@@ -51,6 +53,26 @@ info() ->
     gen_server:cast(?SERVER, info),
     ok.
 
+%% I know it's kinda sloppy to get and set env vars to determine if we should
+%% be printing growl messages, but, hey, it works, and since growl/3 is called
+%% from within the server, we can't call gen_server:call to get the value or it
+%% will just hang. So env vars is the easy copout like using the process dict
+%% TODO: make not use env_var for this :)
+set_growl(true) ->
+    sync_utils:set_env(growl,true),
+    growl("success","Sync","Notifications Enabled"),
+    ok;
+set_growl(false) ->
+    growl("success","Sync","Notifications Disabled"),
+    sync_utils:set_env(growl,false),
+    ok.
+
+get_growl() ->
+    case sync_utils:get_env(growl,true) of
+        Val when is_boolean(Val) -> Val;
+        _ -> true
+    end.
+
 enable_patching() ->
     gen_server:cast(?SERVER, enable_patching),
     ok.
@@ -63,7 +85,12 @@ init([]) ->
     rescan(),
 
     %% Display startup message...
-    growl("success", "Sync", "The Sync utility is now running."),
+    case get_growl() of
+        true ->
+            growl("success", "Sync", "The Sync utility is now running.");
+        false ->
+            io:format("Growl notifications disabled~n")
+    end,
 
     %% Create the state and return...
     State = #state {
@@ -387,12 +414,16 @@ growl_format_errors(Errors, Warnings) ->
     [F(X) || X <- Everything].
 
 growl(Image, Title, Message) ->
-    ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
+    case get_growl() of
+        false -> ok;
+        true ->
+            ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
 
-    %% For OSX
-    GrowlMsg = io_lib:format("growlnotify -n \"Sync\" --image \"~s\" -m \"~s\" \"~s\"", [ImagePath, Message, Title]),
-    os:cmd(GrowlMsg),
+            %% For OSX
+            GrowlMsg = io_lib:format("growlnotify -n \"Sync\" --image \"~s\" -m \"~s\" \"~s\"", [ImagePath, Message, Title]),
+            os:cmd(GrowlMsg),
 
-    %% For Linux.
-    NotifyMsg = io_lib:format("notify-send -i \"~s\" \"~s\" \"~s\" --expire-time=5000", [ImagePath, Title, Message]),
-    os:cmd(NotifyMsg).
+            %% For Linux.
+            NotifyMsg = io_lib:format("notify-send -i \"~s\" \"~s\" \"~s\" --expire-time=5000", [ImagePath, Title, Message]),
+            os:cmd(NotifyMsg)
+    end.
