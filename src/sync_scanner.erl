@@ -7,7 +7,8 @@
 -export([
     start_link/0,
     rescan/0,
-    info/0
+    info/0,
+    enable_patching/0
 ]).
 
 %% gen_server callbacks
@@ -31,7 +32,8 @@
     src_files,
     beam_lastmod,
     src_file_lastmod,
-    timers
+    timers,
+    patching = false
 }).
 
 start_link() ->
@@ -52,7 +54,10 @@ info() ->
     ok.
 
 %% I know it's kinda sloppy to get and set env vars to determine if we should
-%% be printing growl messages, but, hey, it works, right?
+%% be printing growl messages, but, hey, it works, and since growl/3 is called
+%% from within the server, we can't call gen_server:call to get the value or it
+%% will just hang. So env vars is the easy copout like using the process dict
+%% TODO: make not use env_var for this :)
 set_growl(true) ->
     sync_utils:set_env(growl,true),
     growl("success","Sync","Notifications Enabled"),
@@ -67,6 +72,10 @@ get_growl() ->
         Val when is_boolean(Val) -> Val;
         _ -> true
     end.
+
+enable_patching() ->
+    gen_server:cast(?SERVER, enable_patching),
+    ok.
 
 init([]) ->
     %% Trap exits to catch failing processes...
@@ -162,7 +171,7 @@ handle_cast(compare_beams, State) ->
 
     %% Compare to previous results, if there are changes, then reload
     %% the beam...
-    process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod),
+    process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod, State#state.patching),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(compare_beams, 2000, State#state.timers),
@@ -195,6 +204,10 @@ handle_cast(info, State) ->
     io:format("Source Files: ~p~n", [State#state.src_files]),
     {noreply, State};
 
+handle_cast(enable_patching, State) ->
+    NewState = State#state { patching = true },
+    {noreply, NewState};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -224,32 +237,66 @@ schedule_cast(Msg, Default, Timers) ->
     %% Return the new timers structure...
     lists:keystore(Msg, 1, Timers, {Msg, NewTRef}).
 
-process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2]) ->
+process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2], EnablePatching) ->
     %% Beam hasn't changed, do nothing...
-    process_beam_lastmod(T1, T2);
-process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2]) ->
+    process_beam_lastmod(T1, T2, EnablePatching);
+process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching) ->
     %% Beam has changed, reload...
     {Module, Binary, Filename} = code:get_object_code(Module),
     code:load_binary(Module, Filename, Binary),
 
-    %% Print a status message...
-    Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
-    error_logger:info_msg(lists:flatten(Msg)),
-    growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
-    process_beam_lastmod(T1, T2);
-process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2]) ->
+    %% If patching is enabled, then reload the module across *all* connected
+    %% erlang VMs, and save the compiled beam to disk.
+    case EnablePatching of
+        true ->
+            load_module_on_all_nodes(Module),
+            NumNodes = length(nodes()) + 1,
+            Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
+            error_logger:info_msg(lists:flatten(Msg)),
+            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
+            ok;
+        false ->
+            %% Print a status message...
+            Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
+            error_logger:info_msg(lists:flatten(Msg)),
+            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ ".")
+    end,
+
+    process_beam_lastmod(T1, T2, EnablePatching);
+process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2], EnablePatching) ->
     %% Lists are different, advance the smaller one...
     case Module1 < Module2 of
         true ->
-            process_beam_lastmod(T1, [{Module2, LastMod2}|T2]);
+            process_beam_lastmod(T1, [{Module2, LastMod2}|T2], EnablePatching);
         false ->
-            process_beam_lastmod([{Module1, LastMod1}|T1], T2)
+            process_beam_lastmod([{Module1, LastMod1}|T1], T2, EnablePatching)
     end;
-process_beam_lastmod([], []) ->
+process_beam_lastmod([], [], _) ->
     %% Done.
     ok;
-process_beam_lastmod(undefined, _Other) ->
+process_beam_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
+    ok.
+
+load_module_on_all_nodes(Module) ->
+    {Module, Binary, _} = code:get_object_code(Module),
+    F = fun(Node) ->
+        rpc:call(Node, code, ensure_loaded, [Module]),
+        case rpc:call(Node, code, which, [Module]) of
+            undefined ->
+                %% File doesn't exist, just load into VM.
+                {module, Module} = rpc:call(Node, code, load_binary, [Module, undefined, Binary]);
+            Filename ->
+                %% File exists, overwrite and load into VM.
+                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
+                ok = rpc:call(Node, file, write_file, [Filename, Binary]),
+                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
+                rpc:call(Node, code, purge, [Module]),
+                io:format("[~s:~p] DEBUG - 1: ~p~n", [?MODULE, ?LINE, 1]),
+                {module, Module} = rpc:call(Node, code, load_file, [Module])
+        end
+    end,
+    [F(X) || X <- nodes()],
     ok.
 
 process_src_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2]) ->

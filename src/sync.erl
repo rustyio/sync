@@ -8,7 +8,8 @@
 %% API.
 -export ([
     start/0,
-    go/0, 
+    patch/0,
+    go/0,
     info/0,
     stop/0,
     growl/1,growl/0
@@ -34,11 +35,16 @@ start() ->
 
 go() ->
     case application:start(sync) of
-        ok -> 
+        ok ->
             ok;
         {error, {already_started, sync}} ->
             sync_scanner:rescan()
     end.
+
+patch() ->
+    go(),
+    sync_scanner:enable_patching(),
+    ok.
 
 info() ->
     sync_scanner:info().
