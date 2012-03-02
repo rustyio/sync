@@ -318,14 +318,38 @@ process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], EnableP
         true ->
             %% File was removed, do nothing...
             process_src_file_lastmod(T1, [{File2, LastMod2}|T2], EnablePatching);
-        false ->
-            %% File is new, recompile...
-            recompile_src_file(File2, EnablePatching),
+        false ->            
+	    Module = list_to_atom(filename:basename(File2, ".erl")),
+	    case code:which(Module) of				    	
+		BeamFile when is_list(BeamFile) ->
+		    %% check with beam file
+		    case filelib:last_modified(BeamFile) of
+			BeamLastMod when LastMod2 > BeamLastMod ->
+			    recompile_src_file(File2, EnablePatching);
+			_ ->
+			    ok
+		    end;
+		_ ->
+		    %% File is new, recompile...
+		    recompile_src_file(File2, EnablePatching)
+	    end,
             process_src_file_lastmod([{File1, LastMod1}|T1], T2, EnablePatching)
     end;
-process_src_file_lastmod([], [{File, _LastMod}|T2], EnablePatching) ->
-    %% File is new, recompile...
-    recompile_src_file(File, EnablePatching),
+process_src_file_lastmod([], [{File, LastMod}|T2], EnablePatching) ->    
+    Module = list_to_atom(filename:basename(File, ".erl")),
+    case code:which(Module) of
+	BeamFile when is_list(BeamFile) ->
+	    %% check with beam file
+	    case filelib:last_modified(BeamFile) of
+		BeamLastMod when LastMod > BeamLastMod -> 
+		    recompile_src_file(File, EnablePatching);
+		_ ->
+		    ok
+	    end;
+	_ -> 
+	    %% File is new, recompile...
+	    recompile_src_file(File, EnablePatching)
+    end,
     process_src_file_lastmod([], T2, EnablePatching);
 process_src_file_lastmod([], [], _) ->
     %% Done.
@@ -339,7 +363,7 @@ recompile_src_file(SrcFile, EnablePatching) ->
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
     {ok, Options} = sync_options:get_options(SrcDir),
-
+    
     %% Get the old binary code...
     OldBinary = case code:get_object_code(Module) of
         {Module, B, _Filename} -> B;
@@ -354,6 +378,7 @@ recompile_src_file(SrcFile, EnablePatching) ->
 
         {ok, Module, _Binary, Warnings} ->
             %% Compiling changed the beam code. Compile and reload.
+	    io:fwrite("binary change: ~p~n", [Module]),
             compile:file(SrcFile, Options),
             case EnablePatching of
                 true -> code:ensure_loaded(Module);
