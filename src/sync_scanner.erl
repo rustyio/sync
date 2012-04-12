@@ -373,7 +373,7 @@ recompile_src_file(SrcFile, EnablePatching) ->
             end;
 
         undefined ->
-            error_logger:error_msg("Unable to determine options for ~p~n", [SrcFile])
+            error_logger:error_msg("Unable to determine options for ~p", [SrcFile])
     end.
 
 
