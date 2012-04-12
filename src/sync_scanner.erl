@@ -338,7 +338,6 @@ recompile_src_file(SrcFile, EnablePatching) ->
     %% Get the module, src dir, and options...
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
-    {ok, Options} = sync_options:get_options(SrcDir),
 
     %% Get the old binary code...
     OldBinary = case code:get_object_code(Module) of
@@ -346,30 +345,37 @@ recompile_src_file(SrcFile, EnablePatching) ->
         _ -> undefined
     end,
 
-    case compile:file(SrcFile, [binary, return|Options]) of
-        {ok, Module, OldBinary, Warnings} ->
-            %% Compiling didn't change the beam code. Don't reload...
-            print_results(Module, SrcFile, [], Warnings),
-            {ok, [], Warnings};
+    case sync_options:get_options(SrcDir) of
+        {ok, Options} ->
+            case compile:file(SrcFile, [binary, return|Options]) of
+                {ok, Module, OldBinary, Warnings} ->
+                    %% Compiling didn't change the beam code. Don't reload...
+                    print_results(Module, SrcFile, [], Warnings),
+                    {ok, [], Warnings};
 
-        {ok, Module, _Binary, Warnings} ->
-            %% Compiling changed the beam code. Compile and reload.
-            compile:file(SrcFile, Options),
-            case EnablePatching of
-                true -> code:ensure_loaded(Module);
-                false -> ok
-            end,
-            gen_server:cast(?SERVER, compare_beams),
+                {ok, Module, _Binary, Warnings} ->
+                    %% Compiling changed the beam code. Compile and reload.
+                    compile:file(SrcFile, Options),
+                    case EnablePatching of
+                        true -> code:ensure_loaded(Module);
+                        false -> ok
+                    end,
+                    gen_server:cast(?SERVER, compare_beams),
 
-            %% Print the warnings...
-            print_results(Module, SrcFile, [], Warnings),
-            {ok, [], Warnings};
+                    %% Print the warnings...
+                    print_results(Module, SrcFile, [], Warnings),
+                    {ok, [], Warnings};
 
-        {error, Errors, Warnings} ->
-            %% Compiling failed. Print the warnings and errors...
-            print_results(Module, SrcFile, Errors, Warnings),
-            {ok, Errors, Warnings}
+                {error, Errors, Warnings} ->
+                    %% Compiling failed. Print the warnings and errors...
+                    print_results(Module, SrcFile, Errors, Warnings),
+                    {ok, Errors, Warnings}
+            end;
+
+        undefined ->
+            error_logger:error_msg("Unable to determine options for ~p~n", [SrcFile])
     end.
+
 
 print_results(Module, SrcFile, [], []) ->
     Msg = io_lib:format("~s:0: Recompiled.~n", [SrcFile]),
