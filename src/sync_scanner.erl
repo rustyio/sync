@@ -62,6 +62,10 @@ set_growl(true) ->
     sync_utils:set_env(growl,true),
     growl_success("Sync","Notifications Enabled"),
     ok;
+set_growl(skip_success) ->
+    growl_success("Sync","Notifications Enabled (skip success)"),
+    sync_utils:set_env(growl,skip_success),
+    ok;
 set_growl(false) ->
     growl_success("Sync","Notifications Disabled"),
     sync_utils:set_env(growl,false),
@@ -445,7 +449,10 @@ growl(Image, Title, Message) ->
     end.
 
 growl_success(Message) ->
-    growl("success", "Success!", Message).
+    case sync_utils:get_env(growl,true) of
+        skip_success -> ok;
+        _            -> growl("success", "Success!", Message)
+    end.
 
 growl_success(Title, Message) ->
     growl("success", Title, Message).
