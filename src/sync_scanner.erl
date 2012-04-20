@@ -60,10 +60,10 @@ info() ->
 %% TODO: make not use env_var for this :)
 set_growl(true) ->
     sync_utils:set_env(growl,true),
-    growl("success","Sync","Notifications Enabled"),
+    growl_success("Sync","Notifications Enabled"),
     ok;
 set_growl(false) ->
-    growl("success","Sync","Notifications Disabled"),
+    growl_success("Sync","Notifications Disabled"),
     sync_utils:set_env(growl,false),
     ok.
 
@@ -87,7 +87,7 @@ init([]) ->
     %% Display startup message...
     case get_growl() of
         true ->
-            growl("success", "Sync", "The Sync utility is now running.");
+            growl_success("Sync", "The Sync utility is now running.");
         false ->
             io:format("Growl notifications disabled~n")
     end,
@@ -249,17 +249,17 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching) ->
     %% erlang VMs, and save the compiled beam to disk.
     case EnablePatching of
         true ->
-            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ "."),
+            growl_success("Reloaded " ++ atom_to_list(Module) ++ "."),
             {ok, NumNodes} = load_module_on_all_nodes(Module),
             Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
             error_logger:info_msg(lists:flatten(Msg)),
-            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
+            growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
             ok;
         false ->
             %% Print a status message...
             Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
             error_logger:info_msg(lists:flatten(Msg)),
-            growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ ".")
+            growl_success("Reloaded " ++ atom_to_list(Module) ++ ".")
     end,
 
     process_beam_lastmod(T1, T2, EnablePatching);
@@ -300,7 +300,7 @@ load_module_on_all_nodes(Module) ->
                 %% File doesn't exist, just load into VM.
                 {module, Module} = rpc:call(Node, code, load_binary, [Module, undefined, Binary])
         end,
-        growl("success", "Success!", "Reloaded " ++ atom_to_list(Module) ++ " on " ++ atom_to_list(Node) ++ ".")
+        growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ atom_to_list(Node) ++ ".")
     end,
     [F(X) || X <- Nodes],
     {ok, NumNodes}.
@@ -383,7 +383,7 @@ print_results(Module, SrcFile, [], []) ->
         {file, _} ->
             ok;
         false ->
-            growl("success", "Success!", "Recompiled " ++ SrcFile ++ ".")
+            growl_success("Recompiled " ++ SrcFile ++ ".")
     end,
     error_logger:info_msg(lists:flatten(Msg));
 
@@ -392,14 +392,14 @@ print_results(_Module, SrcFile, [], Warnings) ->
         format_errors(SrcFile, [], Warnings),
         io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
-    growl("warnings", "Warnings", growl_format_errors([], Warnings)),
+    growl_warnings(growl_format_errors([], Warnings)),
     error_logger:info_msg(lists:flatten(Msg));
 
 print_results(_Module, SrcFile, Errors, Warnings) ->
     Msg = [
         format_errors(SrcFile, Errors, Warnings)
     ],
-    growl("errors", "Errors...", growl_format_errors(Errors, Warnings)),
+    growl_errors(growl_format_errors(Errors, Warnings)),
     error_logger:info_msg(lists:flatten(Msg)).
 
 
@@ -443,3 +443,21 @@ growl(Image, Title, Message) ->
             NotifyMsg = io_lib:format("notify-send -i \"~s\" \"~s\" \"~s\" --expire-time=5000", [ImagePath, Title, Message]),
             os:cmd(NotifyMsg)
     end.
+
+growl_success(Message) ->
+    growl("success", "Success!", Message).
+
+growl_success(Title, Message) ->
+    growl("success", Title, Message).
+
+growl_errors(Message) ->
+    growl("errors", "Errors...", Message).
+
+growl_errors(Title, Message) ->
+    growl("errors", Title, Message).
+
+growl_warnings(Message) ->
+    growl("warnings", "Warnings", Message).
+
+growl_warnings(Title, Message) ->
+    growl("warnings", Title, Message).
