@@ -460,11 +460,6 @@ growl_success(Title, Message) ->
 growl_errors(Message) ->
     growl("errors", "Errors...", Message).
 
-growl_errors(Title, Message) ->
-    growl("errors", Title, Message).
-
 growl_warnings(Message) ->
     growl("warnings", "Warnings", Message).
 
-growl_warnings(Title, Message) ->
-    growl("warnings", Title, Message).
