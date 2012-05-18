@@ -455,15 +455,22 @@ growl_success(Message) ->
 
 growl_success(Title, Message) ->
     case sync_utils:get_env(growl,true) of
+		true		 -> growl("success", Title, Message);			
         skip_success -> ok;
-        _            -> growl("success", Title, Message)
+        false        -> ok
     end.
 
 growl_errors(Message) ->
-    growl("errors", "Errors...", Message).
+	case sync_utils:get_env(growl,true) of
+		false        -> ok;
+		_			 -> growl("errors", "Errors...", Message)		
+    end.
 
 growl_warnings(Message) ->
-    growl("warnings", "Warnings", Message).
+	case sync_utils:get_env(growl,true) of
+		false        -> ok;
+		_			 -> growl("warnings", "Warnings", Message)	
+    end.
 
 log_success(Message) ->
 	case sync_utils:get_env(log, true) of
@@ -474,12 +481,13 @@ log_success(Message) ->
 
 log_errors(Message) ->
 	case sync_utils:get_env(log, true) of
-		true         -> error_logger:error_msg(lists:flatten(Message));
-		false		 -> ok        
+		false		 -> ok;
+		_	         -> error_logger:error_msg(lists:flatten(Message))
+		        
     end.
 
 log_warnings(Message) ->
 	case sync_utils:get_env(log, true) of
-		true         -> error_logger:warning_msg(lists:flatten(Message));
-		false		 -> ok        
+		false		 -> ok;
+		_	         -> error_logger:warning_msg(lists:flatten(Message))
     end.
