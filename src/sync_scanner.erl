@@ -256,13 +256,13 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching) ->
             growl_success("Reloaded " ++ atom_to_list(Module) ++ "."),
             {ok, NumNodes} = load_module_on_all_nodes(Module),
             Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
-            error_logger:info_msg(lists:flatten(Msg)),
+            log_success(Msg),
             growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
             ok;
         false ->
             %% Print a status message...
             Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
-            error_logger:info_msg(lists:flatten(Msg)),
+            log_success(Msg),
             growl_success("Reloaded " ++ atom_to_list(Module) ++ ".")
     end,
 
@@ -292,7 +292,8 @@ load_module_on_all_nodes(Module) ->
     {Module, Binary, _} = code:get_object_code(Module),
     F = fun(Node) ->
         io:format("[~s:~p] DEBUG - Node: ~p~n", [?MODULE, ?LINE, Node]),
-        error_logger:info_msg("Reloading '~s' on ~s.~n", [Module, Node]),
+        Msg = io_lib:format("Reloading '~s' on ~s.~n", [Module, Node]),
+		log_success(Msg),
         rpc:call(Node, code, ensure_loaded, [Module]),
         case rpc:call(Node, code, which, [Module]) of
             Filename when is_binary(Filename) orelse is_list(Filename) ->
@@ -377,7 +378,8 @@ recompile_src_file(SrcFile, EnablePatching) ->
             end;
 
         undefined ->
-            error_logger:error_msg("Unable to determine options for ~p", [SrcFile])
+            Msg = io_lib:format("Unable to determine options for ~p", [SrcFile]),
+			log_errors(Msg)
     end.
 
 
@@ -389,7 +391,7 @@ print_results(Module, SrcFile, [], []) ->
         false ->
             growl_success("Recompiled " ++ SrcFile ++ ".")
     end,
-    error_logger:info_msg(lists:flatten(Msg));
+    log_success(lists:flatten(Msg));
 
 print_results(_Module, SrcFile, [], Warnings) ->
     Msg = [
@@ -397,14 +399,14 @@ print_results(_Module, SrcFile, [], Warnings) ->
         io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
     growl_warnings(growl_format_errors([], Warnings)),
-    error_logger:info_msg(lists:flatten(Msg));
+    log_warnings(Msg);
 
 print_results(_Module, SrcFile, Errors, Warnings) ->
     Msg = [
         format_errors(SrcFile, Errors, Warnings)
     ],
     growl_errors(growl_format_errors(Errors, Warnings)),
-    error_logger:info_msg(lists:flatten(Msg)).
+    log_errors(Msg).
 
 
 %% @private Print error messages in a pretty and user readable way.
@@ -463,3 +465,21 @@ growl_errors(Message) ->
 growl_warnings(Message) ->
     growl("warnings", "Warnings", Message).
 
+log_success(Message) ->
+	case sync_utils:get_env(log, true) of
+		true         -> error_logger:info_msg(lists:flatten(Message));
+        skip_success -> ok;
+		false		 -> ok        
+    end.
+
+log_errors(Message) ->
+	case sync_utils:get_env(log, true) of
+		true         -> error_logger:error_msg(lists:flatten(Message));
+		false		 -> ok        
+    end.
+
+log_warnings(Message) ->
+	case sync_utils:get_env(log, true) of
+		true         -> error_logger:warning_msg(lists:flatten(Message));
+		false		 -> ok        
+    end.
