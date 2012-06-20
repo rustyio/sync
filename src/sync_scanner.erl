@@ -129,12 +129,9 @@ handle_cast(discover_src_dirs, State) ->
         case sync_utils:get_src_dir_from_module(X) of
             {ok, Dir} ->
                 %% Get the options, store under the dir...
-                {ok, Options1} = sync_utils:get_options_from_module(X),
-                Options2 = sync_utils:transform_options(Dir, Options1),
-
+                {ok, Options} = sync_utils:get_options_from_module(X),
                 %% Store the options for later reference...
-                sync_options:set_options(Dir, Options2),
-
+                sync_options:set_options(Dir, Options),
                 %% Return the dir...
                 [Dir|Acc];
             undefined ->
