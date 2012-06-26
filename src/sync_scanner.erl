@@ -534,16 +534,12 @@ process_hrl_file_lastmod(undefined, _Other, _,  _) ->
 	ok.
 
 who_include(HrlFile, SrcFiles) ->
-	%% io:format("HrlFile was changed: ~p~n", [HrlFile]),
-	%% io:format("SrcFiles: ~p", [SrcFiles]),
 	HrlFileBaseName = filename:basename(HrlFile),
 	Pred = fun(SrcFile) ->
 		{ok, Forms} = epp_dodger:parse_file(SrcFile),
 		is_include(HrlFileBaseName, Forms)
 		end,
-	WhoIncludeList = lists:filter(Pred, SrcFiles),
-	%% io:format("WhoIncludeList: ~p~n", [WhoIncludeList]),
-	WhoIncludeList.
+	lists:filter(Pred, SrcFiles).
 
 is_include(_HrlFile, []) ->
 	false;
@@ -555,10 +551,4 @@ is_include(HrlFile, [{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}}
 	end;
 is_include(HrlFile, [_SomeForm | Forms]) ->
 	is_include(HrlFile, Forms).
-
-%% {tree,attribute,
-%%            {attr,4,[],none},
-%%            {attribute,{tree,atom,{attr,4,[],none},module},
-%%                       [{tree,atom,{attr,4,[],none},k_mb_db}]
-%% },
 
