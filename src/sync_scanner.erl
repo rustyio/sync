@@ -369,7 +369,7 @@ process_src_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
     ok.
 
-recompile_src_file(SrcFile, EnablePatching) ->
+recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
@@ -391,10 +391,15 @@ recompile_src_file(SrcFile, EnablePatching) ->
                 {ok, Module, _Binary, Warnings} ->
                     %% Compiling changed the beam code. Compile and reload.
                     compile:file(SrcFile, Options),
-                    case EnablePatching of
-                        true -> code:ensure_loaded(Module);
-                        false -> ok
-                    end,
+					%% Try to load the module...
+					case code:ensure_loaded(Module) of
+						{module, Module} -> ok;
+						{error, embedded} ->
+							%% Module is not yet loaded, load it.
+							case code:load_file(Module) of
+								{module, Module} -> ok
+							end
+					end,
                     gen_server:cast(?SERVER, compare_beams),
 
                     %% Print the warnings...
