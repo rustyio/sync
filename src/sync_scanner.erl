@@ -451,14 +451,42 @@ growl(Image, Title, Message) ->
         true ->
             ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
 
-            %% For OSX
-            GrowlMsg = io_lib:format("growlnotify -n \"Sync\" --image \"~s\" -m \"~s\" \"~s\"", [ImagePath, Message, Title]),
-            os:cmd(lists:flatten(GrowlMsg)),
-
-            %% For Linux.
-            NotifyMsg = io_lib:format("notify-send -i \"~s\" \"~s\" \"~s\" --expire-time=5000", [ImagePath, Title, Message]),
-            os:cmd(lists:flatten(NotifyMsg))
+            Cmd = case application:get_env(sync, executable) of
+                      undefined ->
+                          case os:type() of
+                              {win32, _} ->
+                                  make_cmd("notifu", Image, Title, Message);
+                              {unix,linux} ->
+                                  make_cmd("notify-send", ImagePath, Title, Message);
+                              _ ->
+                                  make_cmd("growlnotify", ImagePath, Title, Message)
+                          end;
+                      {ok, Executable} ->
+                          make_cmd(Executable, Image, Title, Message)
+                  end,
+            os:cmd(lists:flatten(Cmd))
     end.
+
+make_cmd("growlnotify" = Util, Image, Title, Message) ->
+    [Util, " -n \"Sync\" --image \"", Image,"\"",
+     " -m \"", Message, "\" \"", Title, "\""];
+make_cmd("notify-send" = Util, Image, Title, Message) ->
+    [Util, " -i \"", Image, "\"",
+     " \"", Title, "\" \"", Message, "\" --expire-time=5000"];
+make_cmd("notifu" = Util, Image, Title, Message) ->
+    %% see http://www.paralint.com/projects/notifu/
+    [Util, " /q /d 5000 /t ", image2notifu_type(Image), " ",
+     "/p \"", Title, "\" /m \"", Message, "\""];
+make_cmd(UnsupportedUtil, _, _, _) ->
+    error('unsupported-sync-executable',
+           lists:flatten(io_lib:format("'sync' application environment variable "
+                                       "named 'executable' has unsupported value: ~p",
+                                       [UnsupportedUtil]))).
+
+
+image2notifu_type("success") -> "info";
+image2notifu_type("warnings") -> "warn";
+image2notifu_type("errors") -> "error".
 
 growl_success(Message) ->
     growl_success("Success!", Message).
