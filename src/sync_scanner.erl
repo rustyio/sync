@@ -453,11 +453,11 @@ growl(Image, Title, Message) ->
 
             %% For OSX
             GrowlMsg = io_lib:format("growlnotify -n \"Sync\" --image \"~s\" -m \"~s\" \"~s\"", [ImagePath, Message, Title]),
-            os:cmd(GrowlMsg),
+            os:cmd(lists:flatten(GrowlMsg)),
 
             %% For Linux.
             NotifyMsg = io_lib:format("notify-send -i \"~s\" \"~s\" \"~s\" --expire-time=5000", [ImagePath, Title, Message]),
-            os:cmd(NotifyMsg)
+            os:cmd(lists:flatten(NotifyMsg))
     end.
 
 growl_success(Message) ->
