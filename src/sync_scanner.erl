@@ -470,13 +470,29 @@ growl(Image, Title, Message) ->
 make_cmd("growlnotify" = Util, Image, Title, Message) ->
     [Util, " -n \"Sync\" --image \"", Image,"\"",
      " -m \"", Message, "\" \"", Title, "\""];
+
 make_cmd("notify-send" = Util, Image, Title, Message) ->
     [Util, " -i \"", Image, "\"",
      " \"", Title, "\" \"", Message, "\" --expire-time=5000"];
+
 make_cmd("notifu" = Util, Image, Title, Message) ->
     %% see http://www.paralint.com/projects/notifu/
     [Util, " /q /d 5000 /t ", image2notifu_type(Image), " ",
      "/p \"", Title, "\" /m \"", Message, "\""];
+
+make_cmd("emacsclient" = Util, "warnings", Title, Message0) ->
+    Message = lisp_format(Message0),
+    io_lib:format("~s --eval \"(mapc (lambda (m) (lwarn \\\"sync: ~s\\\" :warning m)) (list ~s))\"",
+                  [Util, Title, Message]);
+make_cmd("emacsclient" = Util, "errors", Title, Message0) ->
+    Message = lisp_format(Message0),
+    io_lib:format("~s --eval \"(mapc (lambda (m) (lwarn \\\"sync: ~s\\\" :error m)) (list ~s))\"",
+                  [Util, Title, Message]);
+make_cmd("emacsclient" = Util, _, Title, Message0) ->
+    Message = replace_chars(Message0, [{$\n, "\\n"}]),
+    io_lib:format("~s --eval \"(message \\\"[sync] ~s: ~s\\\")\"",
+                  [Util, Title, Message]);
+
 make_cmd(UnsupportedUtil, _, _, _) ->
     error('unsupported-sync-executable',
            lists:flatten(io_lib:format("'sync' application environment variable "
@@ -503,3 +519,19 @@ growl_errors(Message) ->
 growl_warnings(Message) ->
     growl("warnings", "Warnings", Message).
 
+%% Return a new string with chars replaced.
+%% @spec replace_chars(iolist(), [{char(), char() | string()}] -> iolist().
+replace_chars(String, Tab) ->
+    lists:map(fun (C) ->
+                      proplists:get_value(C, Tab, C)
+              end,
+              lists:flatten(String)).
+
+%% Return a new string constructed of source lines double quoted and
+%% delimited by space.
+%% spec lisp_format(StringOfLines :: iolist()) -> string().
+lisp_format(String0) ->
+    String1 = lists:flatten(String0),
+    Lines1 = string:tokens(String1, [$\n]),
+    String2 = string:join(Lines1, "\\\" \\\""),
+    lists:flatten(["\\\"", String2, "\\\""]).
