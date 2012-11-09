@@ -82,7 +82,7 @@ If you find the desktop notifications annoying, you can disable them in one of t
 #### 1. As an environment variable called from the erlang command line:
 
     erl -sync growl false
-    erl -sync growl true   #this is the default
+    erl -sync growl true   # Default
 
 
 #### 2. From within the Erlang shell:
@@ -92,13 +92,13 @@ If you find the desktop notifications annoying, you can disable them in one of t
 
 ### Troubleshooting Growl Notifications
 
-Sync attempts to auto-detect the notification package to use.
+Sync attempts to auto-detect the notification package to use via the `os:type()` command.
 
-Alternatively, you can configure this with an environment variable:
+If this isn't working for you, or you would like to override the default, use the `executable` environment variable:
 
     erl -sync executable TYPE
 
-Where type is:
+Where `TYPE` is:
 + `growlnotify` for Mac / Growl.
 + `notify-send` for Linux / libnotify.
 + `notifu` for Windows / Notifu.
