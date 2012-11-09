@@ -58,15 +58,12 @@ Errors:
 /Code/Webmachine/src/webmachine_dispatcher.erl:250: Error: syntax error before: reconstitute
 ```
 
-## Growl Notifications
+## Desktop Notifications
 
-If you are running a Mac and have [Growl](http://growl.info) and the
-**growlnotify** utility installed, Sync will pop up Growl
-notifications with compilation results.  This will also work on Linux
-if you have **notify-send** (Fedora: `libnotify` package, Ubuntu:
-`libnotify-bin` package):
+Sync can pop success / warning / failure notifications onto your desktop to keep you informed of compliation results. All major operating systems are supported: Mac via [Growl](http://growl.info), Linux via Libnotify, Windows via [Notifu](http://www.paralint.com/projects/notifu/) and Emacs via lwarn / message command. Below are Growl screenshots.
 
-Successful compilation:
+
+Success:
 
 ![Successful compilation image.](http://rusty.io.s3.amazonaws.com/sync/sync_01.png)
 
@@ -78,10 +75,9 @@ Errors:
 
 ![Compilation errors image.](http://rusty.io.s3.amazonaws.com/sync/sync_03.png)
 
-### Disabling Growl Notifications
+### Disabling Desktop Notifications
 
-If you find the Growl/notify-send notifications annoying, you can
-choose to disable them with two ways:
+If you find the desktop notifications annoying, you can disable them in one of two ways:
 
 #### 1. As an environment variable called from the erlang command line:
 
@@ -93,6 +89,20 @@ choose to disable them with two ways:
 
     sync:growl(true).    % Enable notifications
     sync:growl(false).   % Disable notifications
+
+### Troubleshooting Growl Notifications
+
+Sync attempts to auto-detect the notification package to use.
+
+Alternatively, you can configure this with an environment variable:
+
+    erl -sync executable TYPE
+
+Where type is:
++ `growlnotify` for Mac / Growl.
++ `notify-send` for Linux / libnotify.
++ `notifu` for Windows / Notifu.
++ `emacsclient` for Emacs notifications.
 
 ## Remote Server "Patching"
 
