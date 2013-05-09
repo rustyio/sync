@@ -2,6 +2,7 @@
 
 -module(sync_scanner).
 -behaviour(gen_server).
+-compile(export_all).
 
 %% API
 -export([
@@ -242,7 +243,7 @@ schedule_cast(Msg, Default, Timers) ->
     lists:keystore(Msg, 1, Timers, {Msg, NewTRef}).
 
 process_beam_lastmod(A, B, EnablePatching) ->
-    process_beam_lastmod(A, B, EnablePatching, {undefined, 0}).
+    process_beam_lastmod(A, B, EnablePatching, {undefined, []}).
 
 process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2], EnablePatching, Acc) ->
     %% Beam hasn't changed, do nothing...
@@ -262,7 +263,7 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching, {FirstB
     end,
     Acc1 = case FirstBeam of
                undefined -> {Module, OtherBeams};
-               _ -> {FirstBeam, OtherBeams+1}
+               _ -> {FirstBeam, [Module | OtherBeams] }
            end,
     process_beam_lastmod(T1, T2, EnablePatching, Acc1);
 
@@ -281,20 +282,43 @@ process_beam_lastmod([], [], EnablePatching, Acc) ->
              end,
     %% Done.
     case Acc of
-        {undefined, 0} ->
+        {undefined, []} ->
             nop; % nothing changed
-        {FirstBeam, 0} ->
+        {FirstBeam, []} ->
             %% Print a status message...
-            growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd);
+            growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd),
+            growl_success("Calling metatyper"),
+            send_metatyper(Acc);
+
         {FirstBeam, N} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++
-                              " and " ++ integer_to_list(N) ++ " other beam files" ++ MsgAdd)
+                              " and " ++ integer_to_list(erlang:length(N)) ++ " other beam files" ++ MsgAdd),
+            send_metatyper(Acc)            
     end,
     ok;
 process_beam_lastmod(undefined, _Other, _, _) ->
     %% First load, do nothing.
     ok.
+
+send_metatyper(Acc) ->
+    case erlang:module_loaded(meta_typer_server) of
+        false -> growl_errors("MetaTyper not loaded");
+        true  -> call_metatyper(Acc)
+    end.
+
+
+
+call_metatyper({FirstBeam, Rest}) ->
+    try erlang:apply(meta_typer_server, module_reload, [[FirstBeam | Rest]]) of
+        {fail, Message} ->
+            Error = io_lib:format("Failed property test:~n~p", [Message]),
+            growl_errors(Error);
+        _ ->
+            growl_success("Property tests passed!")
+    catch
+        _ -> growl_errors("Failed to run property tests.")
+    end.
 
 get_nodes() ->
     lists:usort(lists:flatten(nodes() ++ [rpc:call(X, erlang, nodes, []) || X <- nodes()])) -- [node()].
