@@ -302,6 +302,7 @@ process_beam_lastmod(undefined, _Other, _, _) ->
 
 fire_onsync(Modules) ->
     case sync_options:get_onsync() of
+        undefined -> ok;
         Funs when is_list(Funs) -> onsync_apply_list(Funs, Modules);
         Fun -> onsync_apply(Fun, Modules)
     end.
