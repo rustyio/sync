@@ -287,37 +287,24 @@ process_beam_lastmod([], [], EnablePatching, Acc) ->
         {FirstBeam, []} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd),
-            growl_success("Calling metatyper"),
-            send_metatyper(Acc);
+            fire_onsync(Acc);
 
         {FirstBeam, N} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++
                               " and " ++ integer_to_list(erlang:length(N)) ++ " other beam files" ++ MsgAdd),
-            send_metatyper(Acc)            
+            fire_onsync(Acc)
     end,
     ok;
 process_beam_lastmod(undefined, _Other, _, _) ->
     %% First load, do nothing.
     ok.
 
-send_metatyper(Acc) ->
-    case erlang:module_loaded(meta_typer_server) of
-        false -> growl_errors("MetaTyper not loaded");
-        true  -> call_metatyper(Acc)
-    end.
-
-
-
-call_metatyper({FirstBeam, Rest}) ->
-    try erlang:apply(meta_typer_server, module_reload, [[FirstBeam | Rest]]) of
-        {fail, Message} ->
-            Error = io_lib:format("Failed property test:~n~p", [Message]),
-            growl_errors(Error);
-        _ ->
-            growl_success("Property tests passed!")
-    catch
-        _ -> growl_errors("Failed to run property tests.")
+fire_onsync(Modules) ->
+    case sync_options:get_onsync() of
+        Fun when is_function(Fun) ->
+            Fun(Modules);
+        _ -> ok
     end.
 
 get_nodes() ->
