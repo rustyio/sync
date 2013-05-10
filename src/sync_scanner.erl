@@ -302,10 +302,17 @@ process_beam_lastmod(undefined, _Other, _, _) ->
 
 fire_onsync(Modules) ->
     case sync_options:get_onsync() of
-        Fun when is_function(Fun) ->
-            Fun(Modules);
-        _ -> ok
+        Funs when is_list(Funs) -> onsync_apply_list(Funs, Modules);
+        Fun -> onsync_apply(Fun, Modules)
     end.
+
+onsync_apply_list(Funs, Modules) ->
+    [onsync_apply(Fun, Modules) || Fun <- Funs].
+
+onsync_apply({M, F}, Modules) ->
+    erlang:apply(M, F, [Modules]);
+onsync_apply(Fun, Modules) when is_function(Fun) ->
+    Fun(Modules).
 
 get_nodes() ->
     lists:usort(lists:flatten(nodes() ++ [rpc:call(X, erlang, nodes, []) || X <- nodes()])) -- [node()].
