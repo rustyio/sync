@@ -89,12 +89,9 @@ init([]) ->
     rescan(),
 
     %% Display startup message...
-    case get_growl() of
-        true ->
-            growl_success("Sync", "The Sync utility is now running.");
-        false ->
-            io:format("Growl notifications disabled~n")
-    end,
+    case {get_growl(),os:type()} of
+        {true,{unix,_}} -> growl_success("Sync", "The Sync utility is now running.");
+        _ -> io:format("Growl notifications disabled~n") end,
 
     %% Create the state and return...
     State = #state {
