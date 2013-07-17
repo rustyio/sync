@@ -156,4 +156,6 @@ If you are running sync with the [Nitrogen Web Framework](http://www.nitrogenpro
 -sync sync_mode nitrogen
 ```
 
+## Excluding modules from the scanning process ##
 
+Sometimes you may want to prevent some modules from being scanned by sync. To achive this just modify `excluded_modules` configuration parameter in the `sync.app.src`. However, when sync is a dependency of your app and you're using rebar it's not very useful to specify the excludes there. This is because every get/update-deps overrides this parameter with empty list. Instead put this configuration paramter in the [node's config file](http://www.erlang.org/doc/man/config.html).
