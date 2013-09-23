@@ -30,8 +30,11 @@
     modules,
     src_dirs,
     src_files,
+	hrl_dirs,
+	hrl_files,
     beam_lastmod,
     src_file_lastmod,
+	hrl_file_lastmod,
     timers,
     patching = false
 }).
@@ -46,6 +49,7 @@ rescan() ->
     gen_server:cast(?SERVER, discover_src_files),
     gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
+	gen_server:cast(?SERVER, compare_hrl_files),
     ok.
 
 info() ->
@@ -101,8 +105,11 @@ init([]) ->
         modules = [],
         src_dirs = [],
         src_files = [],
+		hrl_dirs = [],
+		hrl_files = [],
         beam_lastmod = undefined,
         src_file_lastmod = undefined,
+		hrl_file_lastmod = undefined,
         timers=[]
     },
     {ok, State}.
@@ -124,30 +131,30 @@ handle_cast(discover_modules, State) ->
 
 handle_cast(discover_src_dirs, State) ->
     %% Extract the compile / options / source / dir from each module.
-    F = fun(X, Acc) ->
+    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
         %% Get the dir...
         case sync_utils:get_src_dir_from_module(X) of
-            {ok, Dir} ->
+            {ok, SrcDir} ->
                 %% Get the options, store under the dir...
-                {ok, Options1} = sync_utils:get_options_from_module(X),
-                Options2 = sync_utils:transform_options(Dir, Options1),
-
+                {ok, Options} = sync_utils:get_options_from_module(X),
                 %% Store the options for later reference...
-                sync_options:set_options(Dir, Options2),
-
+                sync_options:set_options(SrcDir, Options),
+				HrlDir = proplists:get_value(i, Options, []),
                 %% Return the dir...
-                [Dir|Acc];
+                {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
             undefined ->
                 Acc
         end
     end,
-    Dirs = lists:usort(lists:foldl(F, [], State#state.modules)),
+	{SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
+    USortedSrcDirs = lists:usort(SrcDirs),
+    USortedHrlDirs = lists:usort(HrlDirs),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
 
     %% Return with updated dirs...
-    NewState = State#state { src_dirs=Dirs, timers=NewTimers },
+    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
     {noreply, NewState};
 
 handle_cast(discover_src_files, State) ->
@@ -157,11 +164,17 @@ handle_cast(discover_src_files, State) ->
     end,
     Files = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
+    %% For each include dir, get a list of hrl files...
+    Fhrl = fun(X, Acc) ->
+        sync_utils:wildcard(X, ".*\.hrl$") ++ Acc
+    end,
+    HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
+
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_files, 5000, State#state.timers),
 
     %% Return with updated files...
-    NewState = State#state { src_files=Files, timers=NewTimers },
+    NewState = State#state { src_files=Files, hrl_files=HrlFiles, timers=NewTimers },
     {noreply, NewState};
 
 handle_cast(compare_beams, State) ->
@@ -200,6 +213,24 @@ handle_cast(compare_src_files, State) ->
 
     %% Return with updated src_file lastmod...
     NewState = State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers },
+    {noreply, NewState};
+
+handle_cast(compare_hrl_files, State) ->
+    %% Create a list of file lastmod times...
+    F = fun(X) ->
+        LastMod = filelib:last_modified(X),
+        {X, LastMod}
+    end,
+    NewHrlFileLastMod = lists:usort([F(X) || X <- State#state.hrl_files]),
+
+    %% Compare to previous results, if there are changes, then recompile src files that depends
+    process_hrl_file_lastmod(State#state.hrl_file_lastmod, NewHrlFileLastMod, State#state.src_files, State#state.patching),
+
+    %% Schedule the next interval...
+    NewTimers = schedule_cast(compare_hrl_files, 2000, State#state.timers),
+
+    %% Return with updated hrl_file lastmod...
+    NewState = State#state { hrl_file_lastmod=NewHrlFileLastMod, timers=NewTimers },
     {noreply, NewState};
 
 handle_cast(info, State) ->
@@ -355,7 +386,7 @@ process_src_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
     ok.
 
-recompile_src_file(SrcFile, EnablePatching) ->
+recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
     Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
@@ -377,10 +408,15 @@ recompile_src_file(SrcFile, EnablePatching) ->
                 {ok, Module, _Binary, Warnings} ->
                     %% Compiling changed the beam code. Compile and reload.
                     compile:file(SrcFile, Options),
-                    case EnablePatching of
-                        true -> code:ensure_loaded(Module);
-                        false -> ok
-                    end,
+					%% Try to load the module...
+					case code:ensure_loaded(Module) of
+						{module, Module} -> ok;
+						{error, embedded} ->
+							%% Module is not yet loaded, load it.
+							case code:load_file(Module) of
+								{module, Module} -> ok
+							end
+					end,
                     gen_server:cast(?SERVER, compare_beams),
 
                     %% Print the warnings...
@@ -535,3 +571,61 @@ lisp_format(String0) ->
     Lines1 = string:tokens(String1, [$\n]),
     String2 = string:join(Lines1, "\\\" \\\""),
     lists:flatten(["\\\"", String2, "\\\""]).
+
+process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFiles, Patching) ->
+    %% Hrl hasn't changed, do nothing...
+    process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
+process_hrl_file_lastmod([{File, _}|T1], [{File, _}|T2], SrcFiles, Patching) ->
+    %% File has changed, recompile...
+	WhoInclude = who_include(File, SrcFiles),
+    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+    process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
+process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFiles, Patching) ->
+    %% Lists are different...
+    case File1 < File2 of
+        true ->
+            %% File was removed, do nothing...
+			WhoInclude = who_include(File1, SrcFiles),
+			case WhoInclude of
+				[] -> ok;
+				_ -> io:format(
+						"Warning. Deleted ~p file included in existing src files: ~p",
+						[filename:basename(File1), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
+			end,
+            process_hrl_file_lastmod(T1, [{File2, LastMod2}|T2], SrcFiles, Patching);
+        false ->
+            %% File is new, look for src that include it
+			WhoInclude = who_include(File2, SrcFiles),
+		    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+            process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
+    end;
+process_hrl_file_lastmod([], [{File, _LastMod}|T2], SrcFiles, Patching) ->
+	%% File is new, look for src that include it
+	WhoInclude = who_include(File, SrcFiles),
+    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+	process_hrl_file_lastmod([], T2, SrcFiles, Patching);
+process_hrl_file_lastmod([], [], _, _) ->
+	%% Done
+	ok;
+process_hrl_file_lastmod(undefined, _Other, _,  _) ->
+	%% First load, do nothing
+	ok.
+
+who_include(HrlFile, SrcFiles) ->
+	HrlFileBaseName = filename:basename(HrlFile),
+	Pred = fun(SrcFile) ->
+		{ok, Forms} = epp_dodger:parse_file(SrcFile),
+		is_include(HrlFileBaseName, Forms)
+		end,
+	lists:filter(Pred, SrcFiles).
+
+is_include(_HrlFile, []) ->
+	false;
+is_include(HrlFile, [{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}} | Forms]) when is_list(IncludeFile) ->
+	IncludeFileBaseName = filename:basename(IncludeFile),
+	case IncludeFileBaseName of
+		HrlFile -> true;
+		_ -> is_include(HrlFile, Forms)
+	end;
+is_include(HrlFile, [_SomeForm | Forms]) ->
+	is_include(HrlFile, Forms).

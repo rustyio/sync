@@ -7,7 +7,6 @@
          get_env/2,
          set_env/2,
          file_last_modified_time/1,
-         transform_options/2,
          get_system_modules/0
 ]).
 
@@ -38,7 +37,16 @@ get_options_from_module(Module) ->
         {file, _} ->
             try
                 Props = Module:module_info(compile),
-                {ok, proplists:get_value(options, Props, [])}
+				Options1 = proplists:get_value(options, Props, []),
+				%% transform `outdir'
+				BeamDir = filename:dirname(code:which(Module)),
+				Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
+				%% transform `i'
+				IncludeDir1 = proplists:get_value(i, Options2, "include"),
+				{ok, SrcDir} = get_src_dir_from_module(Module),
+				IncludeDir2 = filename:join(filename:dirname(SrcDir), IncludeDir1),
+				Options3 = [{i, IncludeDir2} | proplists:delete(i, Options2)],
+                {ok, Options3}
             catch _ : _ ->
                     undefined
             end;
@@ -54,16 +62,16 @@ get_src_dir(Dir) ->
 
 get_src_dir(_,Dir) when Dir == ""; Dir == "/"; Dir == "." ->
     undefined;
- 
+
 %% @private Find's the src directory for the directory using the normal method or the original method which is compatible with Nitrogen
 %% Will drop back in the directory tree until it finds either a src, ebin, or include directory and return the parent directory with "src" appended
 get_src_dir(nitrogen,Dir) ->
-    IsCodeDir = filelib:is_dir(filename:join(Dir, "src")) 
-        orelse filelib:is_dir(filename:join(Dir, "ebin")) 
+    IsCodeDir = filelib:is_dir(filename:join(Dir, "src"))
+        orelse filelib:is_dir(filename:join(Dir, "ebin"))
         orelse filelib:is_dir(filename:join(Dir, "include")),
 
     if
-        IsCodeDir -> 
+        IsCodeDir ->
             {ok, filename:join(Dir, "src")};
         true -> get_src_dir(nitrogen,filename:dirname(Dir))
     end;
@@ -105,27 +113,6 @@ file_last_modified_time(File) ->
     catch _Error : _Reason ->
         deleted
     end.
-
-%% @private Walk through each option. If it's an include or outdir option, then
-%% rewrite the path...
-transform_options(SrcDir, Options) ->
-    F = fun(Option, Acc) ->
-        case Option of
-            {i, IncludeDir1} ->
-                IncludeDir2 = filename:join([SrcDir, "..", IncludeDir1]),
-                [{i, IncludeDir2}|Acc];
-            {outdir, _Dir} ->
-                Acc;
-            Other ->
-                [Other|Acc]
-        end
-    end,
-
-    LastPart = hd(lists:reverse(filename:split(proplists:get_value(outdir, Options, "./ebin")))),
-    BinDir = filename:join([SrcDir, "..", LastPart]),
-    lists:foldl(F, [], Options) ++ [{outdir, BinDir}].
-
-
 
 %% @private Return a list of all modules that belong to Erlang rather
 %% than whatever application we may be running.
