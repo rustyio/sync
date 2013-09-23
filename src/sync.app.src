@@ -15,6 +15,12 @@
         {file_variables, "-*- mode: compilation; mode: auto-revert; buffer-read-only: true; auto-revert-interval: 0.5 -*-\n\n"},
 
         %% Temp file to write output messages.
-        {out_file, "/tmp/sync.out"}
+        {out_file, "/tmp/sync.out"},
+
+        %% List of modulesto be excluded from scanning. While using rebar
+        %% it's not very useful to specify the excludes here as every
+        %% get/update-deps will override the settings. Instead specify
+        %% excluded stuff in the node's config file.
+        {excluded_modules, []}
     ]}
 ]}.

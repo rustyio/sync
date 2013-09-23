@@ -118,13 +118,16 @@ handle_call(_Request, _From, State) ->
 
 handle_cast(discover_modules, State) ->
     %% Get a list of all loaded non-system modules.
-    Modules = erlang:loaded() -- sync_utils:get_system_modules(),
+    Modules = (erlang:loaded() -- sync_utils:get_system_modules()),
+
+    %% Delete excluded modules/applications
+    FilteredModules = filter_modules_to_scan(Modules),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_modules, 30000, State#state.timers),
 
     %% Return with updated modules...
-    NewState = State#state { modules=Modules, timers=NewTimers },
+    NewState = State#state { modules=FilteredModules, timers=NewTimers },
     {noreply, NewState};
 
 handle_cast(discover_src_dirs, State) ->
@@ -645,3 +648,21 @@ is_include(HrlFile, [{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}}
 	end;
 is_include(HrlFile, [_SomeForm | Forms]) ->
 	is_include(HrlFile, Forms).
+
+%% @private Filter the excluded modules.
+filter_modules_to_scan(Modules) ->
+    case application:get_env(sync, excluded_modules) of
+        {ok, ExcludedModules} when is_list(ExcludedModules) andalso
+                                   ExcludedModules =/= []->
+            lists:foldl(fun(Module, Acc) ->
+                                case lists:member(Module, ExcludedModules) of
+                                    true ->
+                                        Acc;
+                                    false ->
+                                        [Module | Acc]
+                                end
+                        end, [], Modules);
+
+        _ ->
+            Modules
+    end.
