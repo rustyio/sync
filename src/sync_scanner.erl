@@ -2,6 +2,7 @@
 
 -module(sync_scanner).
 -behaviour(gen_server).
+-compile(export_all).
 
 %% API
 -export([
@@ -270,7 +271,7 @@ schedule_cast(Msg, Default, Timers) ->
     lists:keystore(Msg, 1, Timers, {Msg, NewTRef}).
 
 process_beam_lastmod(A, B, EnablePatching) ->
-    process_beam_lastmod(A, B, EnablePatching, {undefined, 0}).
+    process_beam_lastmod(A, B, EnablePatching, {undefined, []}).
 
 process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2], EnablePatching, Acc) ->
     %% Beam hasn't changed, do nothing...
@@ -290,7 +291,7 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching, {FirstB
     end,
     Acc1 = case FirstBeam of
                undefined -> {Module, OtherBeams};
-               _ -> {FirstBeam, OtherBeams+1}
+               _ -> {FirstBeam, [Module | OtherBeams] }
            end,
     process_beam_lastmod(T1, T2, EnablePatching, Acc1);
 
@@ -309,20 +310,38 @@ process_beam_lastmod([], [], EnablePatching, Acc) ->
              end,
     %% Done.
     case Acc of
-        {undefined, 0} ->
+        {undefined, []} ->
             nop; % nothing changed
-        {FirstBeam, 0} ->
+        {FirstBeam, []} ->
             %% Print a status message...
-            growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd);
+            growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd),
+            fire_onsync(Acc);
+
         {FirstBeam, N} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++
-                              " and " ++ integer_to_list(N) ++ " other beam files" ++ MsgAdd)
+                              " and " ++ integer_to_list(erlang:length(N)) ++ " other beam files" ++ MsgAdd),
+            fire_onsync(Acc)
     end,
     ok;
 process_beam_lastmod(undefined, _Other, _, _) ->
     %% First load, do nothing.
     ok.
+
+fire_onsync(Modules) ->
+    case sync_options:get_onsync() of
+        undefined -> ok;
+        Funs when is_list(Funs) -> onsync_apply_list(Funs, Modules);
+        Fun -> onsync_apply(Fun, Modules)
+    end.
+
+onsync_apply_list(Funs, Modules) ->
+    [onsync_apply(Fun, Modules) || Fun <- Funs].
+
+onsync_apply({M, F}, Modules) ->
+    erlang:apply(M, F, [Modules]);
+onsync_apply(Fun, Modules) when is_function(Fun) ->
+    Fun(Modules).
 
 get_nodes() ->
     lists:usort(lists:flatten(nodes() ++ [rpc:call(X, erlang, nodes, []) || X <- nodes()])) -- [node()].
