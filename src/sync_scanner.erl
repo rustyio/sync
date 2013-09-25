@@ -101,7 +101,7 @@ init([]) ->
     %% Create the state and return...
     State = #state {
         modules = [],
-        src_dirs = [],
+		src_dirs = [],
         src_files = [],
 		hrl_dirs = [],
 		hrl_files = [],
@@ -150,6 +150,8 @@ handle_cast(discover_src_dirs, State) ->
 	{SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
     USortedSrcDirs = lists:usort(SrcDirs),
     USortedHrlDirs = lists:usort(HrlDirs),
+	
+%	InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),

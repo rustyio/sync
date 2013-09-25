@@ -39,8 +39,15 @@ get_onsync() ->
 set_onsync(Fun) ->
     gen_server:call(?SERVER, {set_onsync, Fun}).
 
+%% @private If options are not found for this directory, keep checking the
+%% parent directories for options
+get_options([]) ->
+	undefined;
 get_options(SrcDir) ->
-    gen_server:call(?SERVER, {get_options, SrcDir}).
+	case gen_server:call(?SERVER, {get_options, SrcDir}) of
+		{ok, Options} -> {ok, Options};
+		undefined -> get_options(filename:dirname(SrcDir))
+	end.
 
 set_options(SrcDir, Options) ->
     gen_server:call(?SERVER, {set_options, SrcDir, Options}).
