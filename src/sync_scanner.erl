@@ -1,3 +1,4 @@
+%% vim: ts=4 sw=4 et
 %% -*- mode: nitrogen -*-
 
 -module(sync_scanner).

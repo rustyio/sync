@@ -1,4 +1,4 @@
-%% -*- mode: nitrogen -*-
+%% vim: ts=4 sw=4 et
 
 -module(sync_options).
 -behaviour(gen_server).

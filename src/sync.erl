@@ -1,3 +1,4 @@
+%% vim: ts=4 sw=4 et
 %% Copyright (c) 2011 Rusty Klophaus
 %% Released under the MIT License.
 

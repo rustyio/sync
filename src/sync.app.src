@@ -1,3 +1,4 @@
+% vim: ts=4 sw=4 et ft=erlang
 {application, sync, [
     {description, "Sync - Automatic Code Reloader"},
     {applications, [kernel, stdlib]},
@@ -17,7 +18,7 @@
         %% Temp file to write output messages.
         {out_file, "/tmp/sync.out"},
 
-        %% List of modulesto be excluded from scanning. While using rebar
+        %% List of modules to be excluded from scanning. While using rebar
         %% it's not very useful to specify the excludes here as every
         %% get/update-deps will override the settings. Instead specify
         %% excluded stuff in the node's config file.
