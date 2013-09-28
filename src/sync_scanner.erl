@@ -32,11 +32,11 @@
     modules,
     src_dirs,
     src_files,
-	hrl_dirs,
-	hrl_files,
+    hrl_dirs,
+    hrl_files,
     beam_lastmod,
     src_file_lastmod,
-	hrl_file_lastmod,
+    hrl_file_lastmod,
     timers,
     patching = false
 }).
@@ -51,7 +51,7 @@ rescan() ->
     gen_server:cast(?SERVER, discover_src_files),
     gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
-	gen_server:cast(?SERVER, compare_hrl_files),
+    gen_server:cast(?SERVER, compare_hrl_files),
     ok.
 
 info() ->
@@ -102,13 +102,13 @@ init([]) ->
     %% Create the state and return...
     State = #state {
         modules = [],
-		src_dirs = [],
+        src_dirs = [],
         src_files = [],
-		hrl_dirs = [],
-		hrl_files = [],
+        hrl_dirs = [],
+        hrl_files = [],
         beam_lastmod = undefined,
         src_file_lastmod = undefined,
-		hrl_file_lastmod = undefined,
+        hrl_file_lastmod = undefined,
         timers=[]
     },
     {ok, State}.
@@ -141,18 +141,18 @@ handle_cast(discover_src_dirs, State) ->
                 {ok, Options} = sync_utils:get_options_from_module(X),
                 %% Store the options for later reference...
                 sync_options:set_options(SrcDir, Options),
-				HrlDir = proplists:get_value(i, Options, []),
+                HrlDir = proplists:get_value(i, Options, []),
                 %% Return the dir...
                 {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
             undefined ->
                 Acc
         end
     end,
-	{SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
+    {SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
     USortedSrcDirs = lists:usort(SrcDirs),
     USortedHrlDirs = lists:usort(HrlDirs),
-	
-%	InitialDirs = sync_utils:initial_src_dirs(),
+    
+%   InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
@@ -371,7 +371,7 @@ load_module_on_all_nodes(Module) ->
     F = fun(Node) ->
         io:format("[~s:~p] DEBUG - Node: ~p~n", [?MODULE, ?LINE, Node]),
         Msg = io_lib:format("Reloading '~s' on ~s.~n", [Module, Node]),
-		log_success(Msg),
+        log_success(Msg),
         rpc:call(Node, code, ensure_loaded, [Module]),
         case rpc:call(Node, code, which, [Module]) of
             Filename when is_binary(Filename) orelse is_list(Filename) ->
@@ -439,15 +439,15 @@ recompile_src_file(SrcFile, _EnablePatching) ->
                 {ok, Module, _Binary, Warnings} ->
                     %% Compiling changed the beam code. Compile and reload.
                     compile:file(SrcFile, Options),
-					%% Try to load the module...
-					case code:ensure_loaded(Module) of
-						{module, Module} -> ok;
-						{error, embedded} ->
-							%% Module is not yet loaded, load it.
-							case code:load_file(Module) of
-								{module, Module} -> ok
-							end
-					end,
+                    %% Try to load the module...
+                    case code:ensure_loaded(Module) of
+                        {module, Module} -> ok;
+                        {error, embedded} ->
+                            %% Module is not yet loaded, load it.
+                            case code:load_file(Module) of
+                                {module, Module} -> ok
+                            end
+                    end,
                     gen_server:cast(?SERVER, compare_beams),
 
                     %% Print the warnings...
@@ -462,7 +462,7 @@ recompile_src_file(SrcFile, _EnablePatching) ->
 
         undefined ->
             Msg = io_lib:format("Unable to determine options for ~p", [SrcFile]),
-			log_errors(Msg)
+            log_errors(Msg)
     end.
 
 
@@ -582,42 +582,42 @@ growl_success(Message) ->
 
 growl_success(Title, Message) ->
     case sync_utils:get_env(growl,true) of
-		true		 -> growl("success", Title, Message);			
+        true         -> growl("success", Title, Message);           
         skip_success -> ok;
         false        -> ok
     end.
 
 growl_errors(Message) ->
-	case sync_utils:get_env(growl,true) of
-		false        -> ok;
-		_			 -> growl("errors", "Errors...", Message)		
+    case sync_utils:get_env(growl,true) of
+        false        -> ok;
+        _            -> growl("errors", "Errors...", Message)       
     end.
 
 growl_warnings(Message) ->
-	case sync_utils:get_env(growl,true) of
-		false        -> ok;
-		_			 -> growl("warnings", "Warnings", Message)	
+    case sync_utils:get_env(growl,true) of
+        false        -> ok;
+        _            -> growl("warnings", "Warnings", Message)  
     end.
 
 log_success(Message) ->
-	case sync_utils:get_env(log, true) of
-		true         -> error_logger:info_msg(lists:flatten(Message));
+    case sync_utils:get_env(log, true) of
+        true         -> error_logger:info_msg(lists:flatten(Message));
         skip_success -> ok;
-		false		 -> ok        
+        false        -> ok        
     end.
 
 log_errors(Message) ->
-	case sync_utils:get_env(log, true) of
-		false		 -> ok;
-		_	         -> error_logger:error_msg(lists:flatten(Message))
-		        
+    case sync_utils:get_env(log, true) of
+        false        -> ok;
+        _            -> error_logger:error_msg(lists:flatten(Message))
+                
     end.
 
 log_warnings(Message) ->
-	case sync_utils:get_env(log, true) of
-		false		 -> ok;
-		_	         -> error_logger:warning_msg(lists:flatten(Message))
-	end.
+    case sync_utils:get_env(log, true) of
+        false        -> ok;
+        _            -> error_logger:warning_msg(lists:flatten(Message))
+    end.
 
 %% Return a new string with chars replaced.
 %% @spec replace_chars(iolist(), [{char(), char() | string()}] -> iolist().
@@ -641,7 +641,7 @@ process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFiles, P
     process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
 process_hrl_file_lastmod([{File, _}|T1], [{File, _}|T2], SrcFiles, Patching) ->
     %% File has changed, recompile...
-	WhoInclude = who_include(File, SrcFiles),
+    WhoInclude = who_include(File, SrcFiles),
     [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
     process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
 process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFiles, Patching) ->
@@ -649,50 +649,50 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
     case File1 < File2 of
         true ->
             %% File was removed, do nothing...
-			WhoInclude = who_include(File1, SrcFiles),
-			case WhoInclude of
-				[] -> ok;
-				_ -> io:format(
-						"Warning. Deleted ~p file included in existing src files: ~p",
-						[filename:basename(File1), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
-			end,
+            WhoInclude = who_include(File1, SrcFiles),
+            case WhoInclude of
+                [] -> ok;
+                _ -> io:format(
+                        "Warning. Deleted ~p file included in existing src files: ~p",
+                        [filename:basename(File1), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
+            end,
             process_hrl_file_lastmod(T1, [{File2, LastMod2}|T2], SrcFiles, Patching);
         false ->
             %% File is new, look for src that include it
-			WhoInclude = who_include(File2, SrcFiles),
-		    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+            WhoInclude = who_include(File2, SrcFiles),
+            [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
             process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
     end;
 process_hrl_file_lastmod([], [{File, _LastMod}|T2], SrcFiles, Patching) ->
-	%% File is new, look for src that include it
-	WhoInclude = who_include(File, SrcFiles),
+    %% File is new, look for src that include it
+    WhoInclude = who_include(File, SrcFiles),
     [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
-	process_hrl_file_lastmod([], T2, SrcFiles, Patching);
+    process_hrl_file_lastmod([], T2, SrcFiles, Patching);
 process_hrl_file_lastmod([], [], _, _) ->
-	%% Done
-	ok;
+    %% Done
+    ok;
 process_hrl_file_lastmod(undefined, _Other, _,  _) ->
-	%% First load, do nothing
-	ok.
+    %% First load, do nothing
+    ok.
 
 who_include(HrlFile, SrcFiles) ->
-	HrlFileBaseName = filename:basename(HrlFile),
-	Pred = fun(SrcFile) ->
-		{ok, Forms} = epp_dodger:parse_file(SrcFile),
-		is_include(HrlFileBaseName, Forms)
-		end,
-	lists:filter(Pred, SrcFiles).
+    HrlFileBaseName = filename:basename(HrlFile),
+    Pred = fun(SrcFile) ->
+        {ok, Forms} = epp_dodger:parse_file(SrcFile),
+        is_include(HrlFileBaseName, Forms)
+        end,
+    lists:filter(Pred, SrcFiles).
 
 is_include(_HrlFile, []) ->
-	false;
+    false;
 is_include(HrlFile, [{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}} | Forms]) when is_list(IncludeFile) ->
-	IncludeFileBaseName = filename:basename(IncludeFile),
-	case IncludeFileBaseName of
-		HrlFile -> true;
-		_ -> is_include(HrlFile, Forms)
-	end;
+    IncludeFileBaseName = filename:basename(IncludeFile),
+    case IncludeFileBaseName of
+        HrlFile -> true;
+        _ -> is_include(HrlFile, Forms)
+    end;
 is_include(HrlFile, [_SomeForm | Forms]) ->
-	is_include(HrlFile, Forms).
+    is_include(HrlFile, Forms).
 
 %% @private Filter the excluded modules.
 filter_modules_to_scan(Modules) ->
