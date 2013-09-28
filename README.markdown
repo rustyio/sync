@@ -207,6 +207,33 @@ The scanning process adds 1% to 2% CPU load on a running Erlang VM. Much care
 has been taken to keep this low. Shouldn't have to say this, but this is for
 development mode only, don't run it in production.
 
+## Sync Post-hooks
+
+You can register a post-hook to run after Sync reloads modules. This can allow
+you to run tests on modules if you like, or anything else for that matter.
+
+You can register a post-hook with:
+
+```erlang
+sync:onsync(fun(Mods) ->
+				io:format("Reloaded Modules: ~p~n",[Mods]) 
+			end).
+```
+
+This will simply print the list of modules that were successfully recompiled.
+
+For example, if you wanted to automatically run a unit test on each reloaded
+module that has a `test()` function exported, you could do the following:
+
+```erlang
+RunTests = fun(Mods) ->
+	[Mod:test() || Mod <- Mods, erlang:function_exported(Mod, test, 0)]
+end,
+sync:onsync(RunTests).
+```
+
+*Note:* Currently, only one post-hook can be registered at a time.
+
 ## Excluding modules from the scanning process
 
 Sometimes you may want to prevent some modules from being scanned by sync. To

@@ -335,13 +335,13 @@ process_beam_lastmod([], [], EnablePatching, Acc) ->
         {FirstBeam, []} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++ MsgAdd),
-            fire_onsync(Acc);
+            fire_onsync([FirstBeam]);
 
         {FirstBeam, N} ->
             %% Print a status message...
             growl_success("Reloaded " ++ atom_to_list(FirstBeam) ++
                               " and " ++ integer_to_list(erlang:length(N)) ++ " other beam files" ++ MsgAdd),
-            fire_onsync(Acc)
+            fire_onsync([FirstBeam | N])
     end,
     ok;
 process_beam_lastmod(undefined, _Other, _, _) ->

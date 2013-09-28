@@ -14,7 +14,8 @@
     info/0,
     stop/0,
     growl/1,growl/0,
-    log/1,log/0
+    log/1,log/0,
+    onsync/1,onsync/0
 ]).
 
 %% Application Callbacks.
@@ -66,6 +67,12 @@ log(Val) when ?VALID_GROWL_OR_LOG(Val) ->
 
 log() ->
     sync_scanner:get_log().
+
+onsync(Fun) ->
+    sync_options:set_onsync(Fun).
+
+onsync() ->
+    sync_options:get_onsync().
 
 %% ----------------------------------------------------------------------
 %% Application Callbacks
