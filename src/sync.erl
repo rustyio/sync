@@ -13,7 +13,8 @@
     go/0,
     info/0,
     stop/0,
-    growl/1,growl/0
+    growl/1,growl/0,
+    log/1,log/0
 ]).
 
 %% Application Callbacks.
@@ -26,6 +27,7 @@
 -define(SERVER, ?MODULE).
 -define(PRINT(Var), io:format("DEBUG: ~p:~p - ~p~n~n ~p~n~n", [?MODULE, ?LINE, ??Var, Var])).
 -define(CHILD(I,Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+-define(VALID_GROWL_OR_LOG(X), is_boolean(X); is_list(X); X==all; X==none; X==skip_success).
 
 %% ----------------------------------------------------------------------
 %% API 
@@ -53,11 +55,17 @@ info() ->
 stop() ->
     application:stop(sync).
 
-growl(Val) when is_boolean(Val) ->
+growl(Val) when ?VALID_GROWL_OR_LOG(Val) ->
     sync_scanner:set_growl(Val).
 
 growl() ->
     sync_scanner:get_growl().
+
+log(Val) when ?VALID_GROWL_OR_LOG(Val) ->
+    sync_scanner:set_log(Val).
+
+log() ->
+    sync_scanner:get_log().
 
 %% ----------------------------------------------------------------------
 %% Application Callbacks

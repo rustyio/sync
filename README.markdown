@@ -59,26 +59,36 @@ Errors:
 ## Console Logging
 
 By default, sync will print sucess / warning / failure notifications to the
-erlang console.  You can control this behaviour with the following
-configuration options
+erlang console.  You can control this behaviour with the `log` configuration options.
+
+### Valid Values For `log`
+
+* `all`: Print all console notifications
+* `none`: Print no console notifications
+* `[success | warnings | errors]`: A list of any combination of the atoms
+  `success`, `warnings`, or `errors`.  Example: `[warnings, errors]` will only
+  show warnings and errors, but suppress success messages.
+* `true`: An alias to `all`, kept for backwards compatibility
+* `false`: An alias to `none`, kept for backwards compatibility
+* `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
+
+The `log` value can be specified in any of the following ways:
 
 #### 1. Loaded from a .config file
 
-	{log, true},		%% print all activity to console
-	{log, false}		%% print no activity
-	{log, skip_success}	%% Print only warnings and failures
+	{log, all},	
+	{log, [success, warnings]},
 
 #### 2. As an environment variable called from the erlang command line:
 
-	erl -sync log true
-	erl -sync log false
-	erl -sync log skip_success
+	erl -sync log all
+	erl -sync log none
 
 #### 3. From within the Erlang shell:
 
-	sync:log(true);
-	sync:log(false);
-	sync:log(skip_success);
+	sync:log(all);
+	sync:log(none);
+	sync:log([errors, warnings]);
 
 ## Desktop Notifications
 
@@ -103,26 +113,37 @@ Errors:
 
 ### Disabling Desktop Notifications
 
-If you find the desktop notifications annoying, you can disable them in one of
-two ways:
+Desktop notifications follow the same conventions as the console logging above,
+and can be selectively enabled or disabled with the `growl` configuration variable:
 
-#### 1. As a config value for the `sync` application
+### Valid Values For `growl`
 
-	{growl, true},
-	{growl, false},
-	{growl, skip_success}
+* `all`: Print all console notifications
+* `none`: Print no console notifications
+* `[success | warnings | errors]`: A list of any combination of the atoms
+  `success`, `warnings`, or `errors`.  Example: `[warnings, errors]` will only
+  show warnings and errors, but suppress success messages.
+* `true`: An alias to `all`, kept for backwards compatibility
+* `false`: An alias to `none`, kept for backwards compatibility
+* `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
+
+The `growl` value can be specified in any of the following ways:
+
+#### 1. Loaded from a .config file
+
+	{growl, all},	
+	{growl, [success, warnings]},
 
 #### 2. As an environment variable called from the erlang command line:
 
-    erl -sync growl false
-    erl -sync growl true
-	erl -sync growl skip_success
+	erl -sync growl all
+	erl -sync growl none
 
 #### 3. From within the Erlang shell:
 
-    sync:growl(true).
-    sync:growl(false).
-	sync:growl(skip_success).
+	sync:growl(all);
+	sync:growl(none);
+	sync:growl([errors, warnings]);
 
 ### Troubleshooting Growl Notifications
 
@@ -231,10 +252,18 @@ Please note that sync loads with the following defaults:
 ```erlang
 [
 	{sync, [
-		{growl, true},
-		{log, true},
+		{growl, all},
+		{log, all},
 		{non_descendants, fix},
-		{executable, auto}
+		{executable, auto},
+		{excluded_modules, []}
 	]}
 ].
 ```
+
+You can view a full sample configuration file that you're free to include in
+your application. Just be sure to use the `-config` switch for the `erl`
+program:
+
+	erl -config sync.config
+

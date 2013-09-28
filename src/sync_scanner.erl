@@ -21,11 +21,15 @@
     terminate/2,
     code_change/3,
     set_growl/1,
-    get_growl/0
+    get_growl/0,
+    set_log/1,
+    get_log/0
 ]).
 
 -define(SERVER, ?MODULE).
 -define(PRINT(Var), io:format("DEBUG: ~p:~p - ~p~n~n ~p~n~n", [?MODULE, ?LINE, ??Var, Var])).
+-define(LOG_OR_GROWL_ON(Val),Val==true;Val==all;Val==skip_success;is_list(Val),Val=/=[]).
+-define(LOG_OR_GROWL_OFF(Val),Val==false;F==none;F==[]).
 
 -record(state, {
     modules,
@@ -58,29 +62,32 @@ info() ->
     gen_server:cast(?SERVER, info),
     ok.
 
-%% I know it's kinda sloppy to get and set env vars to determine if we should
-%% be printing growl messages, but, hey, it works, and since growl/3 is called
-%% from within the server, we can't call gen_server:call to get the value or it
-%% will just hang. So env vars is the easy copout like using the process dict
-%% TODO: make not use env_var for this :)
-set_growl(true) ->
-    sync_utils:set_env(growl,true),
-    growl_success("Sync","Notifications Enabled"),
+set_growl(T) when ?LOG_OR_GROWL_ON(T) ->
+    sync_utils:set_env(growl,all),
+    growl_success("Sync","Desktop Notifications Enabled"),
+    sync_utils:set_env(growl,T),
     ok;
-set_growl(skip_success) ->
-    growl_success("Sync","Notifications Enabled (skip success)"),
-    sync_utils:set_env(growl,skip_success),
-    ok;
-set_growl(false) ->
-    growl_success("Sync","Notifications Disabled"),
-    sync_utils:set_env(growl,false),
+set_growl(F) when ?LOG_OR_GROWL_OFF(F) ->
+    sync_utils:set_env(growl,all),
+    growl_success("Sync","Desktop Notifications Disabled"),
+    sync_utils:set_env(growl,none),
     ok.
 
 get_growl() ->
-    case sync_utils:get_env(growl,true) of
-        Val when is_boolean(Val) -> Val;
-        _ -> true
-    end.
+    sync_utils:get_env(growl, all).
+
+set_log(T) when ?LOG_OR_GROWL_ON(T) ->
+    sync_utils:set_env(log, T),
+    log_success("Console Notifications Enabled~n"),
+    ok;
+set_log(F) when ?LOG_OR_GROWL_OFF(F) ->
+    log_success("Console Notifications Disabled~n"),
+    sync_utils:set_env(log, none),
+    ok.
+
+get_log() ->
+    sync_utils:get_env(log, all).
+
 
 enable_patching() ->
     gen_server:cast(?SERVER, enable_patching),
@@ -518,25 +525,21 @@ growl_format_errors(Errors, Warnings) ->
     [F(X) || X <- Everything].
 
 growl(Image, Title, Message) ->
-    case get_growl() of
-        false -> ok;
-        true ->
-            ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
-            Cmd = case sync_utils:get_env(executable, auto) of
-                      auto ->
-                          case os:type() of
-                              {win32, _} ->
-                                  make_cmd("notifu", Image, Title, Message);
-                              {unix,linux} ->
-                                  make_cmd("notify-send", ImagePath, Title, Message);
-                              _ ->
-                                  make_cmd("growlnotify", ImagePath, Title, Message)
-                          end;
-                      Executable ->
-                          make_cmd(Executable, Image, Title, Message)
-                  end,
-            os:cmd(lists:flatten(Cmd))
-    end.
+    ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
+    Cmd = case sync_utils:get_env(executable, auto) of
+              auto ->
+                  case os:type() of
+                      {win32, _} ->
+                          make_cmd("notifu", Image, Title, Message);
+                      {unix,linux} ->
+                          make_cmd("notify-send", ImagePath, Title, Message);
+                      _ ->
+                          make_cmd("growlnotify", ImagePath, Title, Message)
+                  end;
+              Executable ->
+                  make_cmd(Executable, Image, Title, Message)
+          end,
+    os:cmd(lists:flatten(Cmd)).
 
 make_cmd(Util, Image, Title, Message) when is_atom(Util) ->
     make_cmd(atom_to_list(Util), Image, Title, Message);
@@ -573,8 +576,6 @@ make_cmd(UnsupportedUtil, _, _, _) ->
                                        "named 'executable' has unsupported value: ~p",
                                        [UnsupportedUtil]))).
 
-
-image2notifu_type("success") -> "info";
 image2notifu_type("warnings") -> "warn";
 image2notifu_type("errors") -> "error".
 
@@ -582,42 +583,44 @@ growl_success(Message) ->
     growl_success("Success!", Message).
 
 growl_success(Title, Message) ->
-    case sync_utils:get_env(growl,true) of
-        true         -> growl("success", Title, Message);           
-        skip_success -> ok;
-        false        -> ok
-    end.
+    can_we_growl(success)
+        andalso growl("success", Title, Message).
 
 growl_errors(Message) ->
-    case sync_utils:get_env(growl,true) of
-        false        -> ok;
-        _            -> growl("errors", "Errors...", Message)       
-    end.
+    can_we_growl(errors)
+        andalso growl("errors", "Errors...", Message).
 
 growl_warnings(Message) ->
-    case sync_utils:get_env(growl,true) of
-        false        -> ok;
-        _            -> growl("warnings", "Warnings", Message)  
-    end.
+    can_we_growl(warnings)
+        andalso growl("warnings", "Warnings", Message).
 
 log_success(Message) ->
-    case sync_utils:get_env(log, true) of
-        true         -> error_logger:info_msg(lists:flatten(Message));
-        skip_success -> ok;
-        false        -> ok        
-    end.
+    can_we_log(success)
+        andalso error_logger:info_msg(lists:flatten(Message)).
 
 log_errors(Message) ->
-    case sync_utils:get_env(log, true) of
-        false        -> ok;
-        _            -> error_logger:error_msg(lists:flatten(Message))
-                
-    end.
+    can_we_log(errors)
+        andalso error_logger:error_msg(lists:flatten(Message)).
 
 log_warnings(Message) ->
-    case sync_utils:get_env(log, true) of
-        false        -> ok;
-        _            -> error_logger:warning_msg(lists:flatten(Message))
+    can_we_log(warnings)
+        andalso error_logger:warning_msg(lists:flatten(Message)).
+
+can_we_growl(MsgType) ->
+    can_we_notify(growl, MsgType).
+
+can_we_log(MsgType) ->
+    can_we_notify(log, MsgType).
+
+can_we_notify(GrowlOrLog,MsgType) ->
+    case sync_utils:get_env(GrowlOrLog, all) of
+        true              -> true;
+        all               -> true;
+        none              -> false;
+        false             -> false;
+        skip_success      -> MsgType==errors orelse MsgType==warnings;
+        L when is_list(L) -> lists:member(MsgType, L);
+        _                 -> false
     end.
 
 %% Return a new string with chars replaced.
