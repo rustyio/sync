@@ -232,6 +232,9 @@ end,
 sync:onsync(RunTests).
 ```
 
+A post-hook can also be specified as a `{Module,Function}` tuple, which assumes
+`Module:Function/1`
+
 *Note:* Currently, only one post-hook can be registered at a time.
 
 ### Unregistering a post-hook
