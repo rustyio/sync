@@ -25,21 +25,21 @@ get_src_dir_from_module(Module)->
                 
                 IsFile = filelib:is_regular(Source),
                 IsDecendant = is_path_decendent(Source),
-                NonDecendants = get_env(non_decendants, fix),
+                NonDecendants = get_env(non_descendants, fix),
                 Source2 = case {IsFile, IsDecendant, NonDecendants} of
-                    %% is file and decendant, we're good to go
+                    %% is file and descendant, we're good to go
                     {true, true,  _}    -> Source;
 
-                    %% is not a decendant, but we allow them, so good to go
+                    %% is not a descendant, but we allow them, so good to go
                     {true, false, allow}-> Source;
 
-                    %% is not a file, but is a decendant, file is deleted,
+                    %% is not a file, but is a descendant, file is deleted,
                     %% nothing we can do
                     {false,true,  _}    -> undefined;
 
-                    %% is not a decendant, and we fix non-decendants, so let's
+                    %% is not a descendant, and we fix non-descendants, so let's
                     %% fix it
-                    {_,    false, fix}  -> find_decendant_module(Source);
+                    {_,    false, fix}  -> find_descendant_module(Source);
 
                     %% Anything else, and we don't know what to do, so let's
                     %% just bail.
@@ -144,21 +144,21 @@ normalize_case_windows_dir(Dir) ->
 %% path one by one prefixing it with the current working directory until it
 %% either finds a match, or fails.  If it succeeds, it returns the Path to the
 %% new Source file.
-find_decendant_module(Path) ->
+find_descendant_module(Path) ->
     PathParts = filename:split(Path),
     {ok, Cwd} = file:get_cwd(),
-    find_decendant_module(Cwd, PathParts).
+    find_descendant_module(Cwd, PathParts).
 
-find_decendant_module(_Cwd, []) ->
+find_descendant_module(_Cwd, []) ->
     undefined;
-find_decendant_module(Cwd, [_|T]) ->
+find_descendant_module(Cwd, [_|T]) ->
     PathAttempt = filename:join([Cwd|T]),
     case filelib:is_regular(PathAttempt) of
         true -> PathAttempt;
-        false -> find_decendant_module(Cwd, T)
+        false -> find_descendant_module(Cwd, T)
     end.
 
-%% @private returns true if the provided path is a decendant of the current
+%% @private returns true if the provided path is a descendant of the current
 %% working directory.
 is_path_decendent(Path) ->
     {ok, Cwd} = file:get_cwd(),

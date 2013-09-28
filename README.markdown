@@ -203,20 +203,20 @@ The solution to this was to enable the ability for sync to "heal" the paths
 when it turned out they had been moved.
 
 The way this works is by checking if the `source` path inside the beam is a
-file that exists, and by checking if that path is a decendant of the root of
+file that exists, and by checking if that path is a descendant of the root of
 your application.  If sync has been set to fix the paths, and module's source
-is pointing at a path that isn't a decendant of the current working directory,
+is pointing at a path that isn't a descendant of the current working directory,
 it will attempt to find the correct file.
 
-You can change how this will be handled with a `non_decendants` setting in the
+You can change how this will be handled with a `non_descendants` setting in the
 config:
 
-* `fix`: Fix any file that isn't a decendant
+* `fix`: Fix any file that isn't a descendant
 
 * `allow`: Use the original path in the module, regardless of its location,
   recompiling only if the original location changes.
 
-* `ignore`: If a file is not a decendant, sync will completely ignore it.
+* `ignore`: If a file is not a descendant, sync will completely ignore it.
 
 ## A note about Nitrogen
 
@@ -233,7 +233,7 @@ Please note that sync loads with the following defaults:
 	{sync, [
 		{growl, true},
 		{log, true},
-		{non_decendants, fix},
+		{non_descendants, fix},
 		{executable, auto}
 	]}
 ].
