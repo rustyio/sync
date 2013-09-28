@@ -297,9 +297,10 @@ Please note that sync loads with the following defaults:
 ].
 ```
 
-You can view a full sample configuration file that you're free to include in
-your application. Just be sure to use the `-config` switch for the `erl`
-program:
+You can view a full sample configuration file
+([sync.sample.config](https://github.com/choptastic/sync/blob/moving_release2/sync.sample.config))
+that you're free to include in your application. Just be sure to use the
+`-config` switch for the `erl` program:
 
 	erl -config sync.config
 
