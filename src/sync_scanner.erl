@@ -1,5 +1,4 @@
 %% vim: ts=4 sw=4 et
-%% -*- mode: nitrogen -*-
 
 -module(sync_scanner).
 -behaviour(gen_server).
@@ -523,9 +522,8 @@ growl(Image, Title, Message) ->
         false -> ok;
         true ->
             ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
-
-            Cmd = case application:get_env(sync, executable) of
-                      undefined ->
+            Cmd = case sync_utils:get_env(executable, auto) of
+                      auto ->
                           case os:type() of
                               {win32, _} ->
                                   make_cmd("notifu", Image, Title, Message);
@@ -534,11 +532,14 @@ growl(Image, Title, Message) ->
                               _ ->
                                   make_cmd("growlnotify", ImagePath, Title, Message)
                           end;
-                      {ok, Executable} ->
+                      Executable ->
                           make_cmd(Executable, Image, Title, Message)
                   end,
             os:cmd(lists:flatten(Cmd))
     end.
+
+make_cmd(Util, Image, Title, Message) when is_atom(Util) ->
+    make_cmd(atom_to_list(Util), Image, Title, Message);
 
 make_cmd("growlnotify" = Util, Image, Title, Message) ->
     [Util, " -n \"Sync\" --image \"", Image,"\"",
