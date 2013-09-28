@@ -234,6 +234,12 @@ sync:onsync(RunTests).
 
 *Note:* Currently, only one post-hook can be registered at a time.
 
+### Unregistering a post-hook
+
+To unregister a post-hook, just call
+
+	sync:onsync(undefined).
+
 ## Excluding modules from the scanning process
 
 Sometimes you may want to prevent some modules from being scanned by sync. To
