@@ -576,6 +576,7 @@ make_cmd(UnsupportedUtil, _, _, _) ->
                                        "named 'executable' has unsupported value: ~p",
                                        [UnsupportedUtil]))).
 
+image2notifu_type("success") -> "info";
 image2notifu_type("warnings") -> "warn";
 image2notifu_type("errors") -> "error".
 
