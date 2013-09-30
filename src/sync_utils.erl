@@ -1,3 +1,4 @@
+%% vim: ts=4 sw=4 et
 -module(sync_utils).
 -export([
          get_src_dir_from_module/1,
@@ -19,16 +20,42 @@ get_src_dir_from_module(Module)->
                 Props = Module:module_info(compile),
                 Source = proplists:get_value(source, Props, ""),
 
-                %% Ensure that the file exists...
-                filelib:is_regular(Source) orelse
-                    throw(not_found),
+                %% Ensure that the file exists, is a decendent of the tree, and
+                %% how to deal with that
+                
+                IsFile = filelib:is_regular(Source),
+                IsDecendant = is_path_decendent(Source),
+                NonDecendants = get_env(non_descendants, fix),
+                Source2 = case {IsFile, IsDecendant, NonDecendants} of
+                    %% is file and descendant, we're good to go
+                    {true, true,  _}    -> Source;
 
-                %% Get the source dir...
-                Dir = filename:dirname(Source),
-                get_src_dir(Dir)
-            catch _ : _ ->
-                    undefined
-            end;
+                    %% is not a descendant, but we allow them, so good to go
+                    {true, false, allow}-> Source;
+
+                    %% is not a file, but is a descendant, file is deleted,
+                    %% nothing we can do
+                    {false,true,  _}    -> undefined;
+
+                    %% is not a descendant, and we fix non-descendants, so let's
+                    %% fix it
+                    {_,    false, fix}  -> find_descendant_module(Source);
+
+                    %% Anything else, and we don't know what to do, so let's
+                    %% just bail.
+                    _                   -> undefined
+                end,
+
+                case Source2 of
+                    undefined -> undefined;
+                    _ ->
+                        %% Get the source dir...
+                        Dir = filename:dirname(Source2),
+                        get_src_dir(Dir)
+                end
+           catch _ : _ ->
+                   undefined
+           end;
         _ ->
             undefined
     end.
@@ -38,7 +65,20 @@ get_options_from_module(Module) ->
         {file, _} ->
             try
                 Props = Module:module_info(compile),
-                {ok, proplists:get_value(options, Props, [])}
+                Options1 = proplists:get_value(options, Props, []),
+                %% transform `outdir'
+                BeamDir = filename:dirname(code:which(Module)),
+                Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
+                %% transform `i' (Include Directory)
+                IncludeDir1 = proplists:get_value(i, Options2, "include"),
+                {ok, SrcDir} = get_src_dir_from_module(Module),
+                IncludeDir2 = case determine_include_dir(IncludeDir1, BeamDir, SrcDir) of
+                    {ok, D} -> D;
+                    undefined -> IncludeDir1
+                end,
+                    
+                Options3 = [{i, IncludeDir2} | proplists:delete(i, Options2)],
+                {ok, Options3}
             catch _ : _ ->
                     undefined
             end;
@@ -46,40 +86,93 @@ get_options_from_module(Module) ->
             {ok, []}
     end.
 
+%% @private This will search back to find an appropriate include directory, by
+%% searching further back than "..". Instead, it will extract the basename
+%% (probably "include" from the include pathfile, and then search backwards in
+%% the directory tree until it finds a directory with the same basename found
+%% above.
+determine_include_dir(IncludeDir, BeamDir, SrcDir) ->
+    IncludeBase = filename:basename(IncludeDir),
+    case determine_include_dir_from_beam_dir(IncludeBase, BeamDir) of
+        {ok, D} -> {ok, D};
+        undefined ->
+            {ok, Cwd} = file:get_cwd(),
+            Cwd2 = normalize_case_windows_dir(Cwd),
+            SrcDir2 = normalize_case_windows_dir(SrcDir),
+            IncludeBase2 = normalize_case_windows_dir(IncludeBase),
+            case find_include_dir_from_ancestors(Cwd2, IncludeBase2, SrcDir2) of
+                {ok, D} -> {ok, D};
+                undefined -> {ok, IncludeDir} %% Failed, just stick with original
+            end
+    end.
+
+%% @private First try to see if we have an include file alongside our ebin
+%directory, which is typically the case
+determine_include_dir_from_beam_dir(IncludeBase, BeamDir) ->
+    BeamBasedIncDir = filename:join(filename:dirname(BeamDir),IncludeBase),
+    case filelib:is_dir(BeamBasedIncDir) of
+        true -> {ok, BeamBasedIncDir};
+        false -> undefined
+    end.
+
+%% @private Then we dig back through the parent directories until we find our
+%include directory
+find_include_dir_from_ancestors(Cwd, _, Cwd) -> undefined;
+find_include_dir_from_ancestors(_, _, "/") -> undefined;
+find_include_dir_from_ancestors(_, _, ".") -> undefined;
+find_include_dir_from_ancestors(_, _, "") -> undefined;
+find_include_dir_from_ancestors(Cwd, IncludeBase, Dir) ->
+    AttemptDir = filename:join(filename:dirname(Dir),IncludeBase),
+    case filelib:is_dir(AttemptDir) of
+        true ->
+            AttemptDir;
+        false ->
+            find_include_dir_from_ancestors(Cwd, IncludeBase, filename:dirname(Dir))
+    end.
+    
+normalize_case_windows_dir(Dir) ->
+    case os:type() of
+        {win32,_} -> string:to_lower(Dir);
+        {unix,_} -> Dir
+    end.
+    
+
+%% @private This is an attempt to intelligently fix paths in modules when a
+%% release is moved.  Essentially, it takes a module name and its original path
+%% from Module:module_info(compile), say
+%% "/some/original/path/site/src/pages/somepage.erl", and then breaks down the
+%% path one by one prefixing it with the current working directory until it
+%% either finds a match, or fails.  If it succeeds, it returns the Path to the
+%% new Source file.
+find_descendant_module(Path) ->
+    PathParts = filename:split(Path),
+    {ok, Cwd} = file:get_cwd(),
+    find_descendant_module(Cwd, PathParts).
+
+find_descendant_module(_Cwd, []) ->
+    undefined;
+find_descendant_module(Cwd, [_|T]) ->
+    PathAttempt = filename:join([Cwd|T]),
+    case filelib:is_regular(PathAttempt) of
+        true -> PathAttempt;
+        false -> find_descendant_module(Cwd, T)
+    end.
+
+%% @private returns true if the provided path is a descendant of the current
+%% working directory.
+is_path_decendent(Path) ->
+    {ok, Cwd} = file:get_cwd(),
+    lists:sublist(Path, length(Cwd)) == Cwd.
 
 %% @private Find the src directory for the specified Directory
 get_src_dir(Dir) ->
-    Mode = get_env(sync_mode,normal),
-    get_src_dir(Mode,Dir).
-
-get_src_dir(_,Dir) when Dir == ""; Dir == "/"; Dir == "." ->
-    undefined;
- 
-%% @private Find's the src directory for the directory using the normal method or the original method which is compatible with Nitrogen
-%% Will drop back in the directory tree until it finds either a src, ebin, or include directory and return the parent directory with "src" appended
-get_src_dir(nitrogen,Dir) ->
-    IsCodeDir = filelib:is_dir(filename:join(Dir, "src")) 
-        orelse filelib:is_dir(filename:join(Dir, "ebin")) 
-        orelse filelib:is_dir(filename:join(Dir, "include")),
-
-    if
-        IsCodeDir -> 
-            {ok, filename:join(Dir, "src")};
-        true -> get_src_dir(nitrogen,filename:dirname(Dir))
-    end;
-
-%% Normal method is smarter and returns exactly any path that has .erl or .hrl files in it
-%% With Nitrogen, or any structure in which -include("something.hrl") specifies an implied directory, this will give "unable to find include file" errors
-get_src_dir(normal,Dir) ->
     HasCode =
         filelib:wildcard("*.erl", Dir) /= [] orelse
         filelib:wildcard("*.hrl", Dir) /= [],
-        if
-            HasCode -> {ok,Dir};
-            true -> get_src_dir(filename:dirname(Dir))
-        end;
-get_src_dir(OtherMode,_Dir) ->
-    throw({unknown_mode,OtherMode}).
+    if
+        HasCode -> {ok,Dir};
+        true -> get_src_dir(filename:dirname(Dir))
+    end.
 
 %% @private Return all files in a directory matching a regex.
 wildcard(Dir, Regex) ->
@@ -87,7 +180,7 @@ wildcard(Dir, Regex) ->
 
 %% @private Get an environment variable.
 get_env(Var, Default) ->
-    case application:get_env(Var) of
+    case application:get_env(sync, Var) of
         {ok, Value} ->
             Value;
         _ ->
@@ -121,11 +214,9 @@ transform_options(SrcDir, Options) ->
         end
     end,
 
-    LastPart = hd(lists:reverse(filename:split(proplists:get_value(outdir, Options, "./ebin")))),
+    LastPart = filename:basename(proplists:get_value(outdir, Options, "./ebin")),
     BinDir = filename:join([SrcDir, "..", LastPart]),
     lists:foldl(F, [], Options) ++ [{outdir, BinDir}].
-
-
 
 %% @private Return a list of all modules that belong to Erlang rather
 %% than whatever application we may be running.
