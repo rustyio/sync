@@ -125,7 +125,7 @@ find_include_dir_from_ancestors(Cwd, IncludeBase, Dir) ->
     AttemptDir = filename:join(filename:dirname(Dir),IncludeBase),
     case filelib:is_dir(AttemptDir) of
         true ->
-            AttemptDir;
+            {ok, AttemptDir};
         false ->
             find_include_dir_from_ancestors(Cwd, IncludeBase, filename:dirname(Dir))
     end.
