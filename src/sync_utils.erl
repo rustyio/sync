@@ -72,10 +72,7 @@ get_options_from_module(Module) ->
                 %% transform `i' (Include Directory)
                 IncludeDir1 = proplists:get_value(i, Options2, "include"),
                 {ok, SrcDir} = get_src_dir_from_module(Module),
-                IncludeDir2 = case determine_include_dir(IncludeDir1, BeamDir, SrcDir) of
-                    {ok, D} -> D;
-                    undefined -> IncludeDir1
-                end,
+                {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
                     
                 Options3 = [{i, IncludeDir2} | proplists:delete(i, Options2)],
                 {ok, Options3}
