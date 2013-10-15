@@ -290,29 +290,37 @@ process_beam_lastmod([{Module, LastMod}|T1], [{Module, LastMod}|T2], EnablePatch
     process_beam_lastmod(T1, T2, EnablePatching, Acc);
 process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching, {FirstBeam, OtherBeams}) ->
     %% Beam has changed, reload...
-    {Module, Binary, Filename} = code:get_object_code(Module),
-    code:load_binary(Module, Filename, Binary),
+    Acc1 = case code:get_object_code(Module) of
+        error ->
+            Msg = io_lib:format("Error loading object code for ~p~n", [Module]),
+            log_errors(Msg),
+            growl_errors(Msg),
+            {FirstBeam, OtherBeams};
 
-    %% If patching is enabled, then reload the module across *all* connected
-    %% erlang VMs, and save the compiled beam to disk.
-    case EnablePatching of
-        true ->
-            growl_success("Reloaded " ++ atom_to_list(Module) ++ "."),
-            {ok, NumNodes} = load_module_on_all_nodes(Module),
-            Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
-            log_success(Msg),
-            growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
-            ok;
-        false ->
-            %% Print a status message...
-            Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
-            log_success(Msg),
-            growl_success("Reloaded " ++ atom_to_list(Module) ++ ".")
-    end,
-    Acc1 = case FirstBeam of
+        {Module, Binary, Filename} ->
+            code:load_binary(Module, Filename, Binary),
+
+            %% If patching is enabled, then reload the module across *all* connected
+            %% erlang VMs, and save the compiled beam to disk.
+            case EnablePatching of
+                true ->
+                    growl_success("Reloaded " ++ atom_to_list(Module) ++ "."),
+                    {ok, NumNodes} = load_module_on_all_nodes(Module),
+                    Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
+                    log_success(Msg),
+                    growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
+                    ok;
+                false ->
+                    %% Print a status message...
+                    Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
+                    log_success(Msg),
+                    growl_success("Reloaded " ++ atom_to_list(Module) ++ ".")
+            end,
+            case FirstBeam of
                undefined -> {Module, OtherBeams};
                _ -> {FirstBeam, [Module | OtherBeams] }
-           end,
+           end
+    end,
     process_beam_lastmod(T1, T2, EnablePatching, Acc1);
 
 process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2], EnablePatching, Acc) ->
