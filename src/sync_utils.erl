@@ -3,6 +3,7 @@
 -export([
          get_src_dir_from_module/1,
          get_options_from_module/1,
+         is_erlydtl_template/1,
          get_src_dir/1,
          wildcard/2,
          get_env/2,
@@ -18,7 +19,12 @@ get_src_dir_from_module(Module)->
             try
                 %% Get some module info...
                 Props = Module:module_info(compile),
-                Source = proplists:get_value(source, Props, ""),
+                BaseSource = proplists:get_value(source, Props, ""),
+
+                Source = case is_erlydtl_template(Module) of
+                             true -> string:substr(BaseSource, 1, string:rstr(BaseSource, ".erl")-1);
+                             false -> BaseSource
+                         end,
 
                 %% Ensure that the file exists, is a decendent of the tree, and
                 %% how to deal with that
@@ -73,8 +79,10 @@ get_options_from_module(Module) ->
                 IncludeDir1 = proplists:get_value(i, Options2, "include"),
                 {ok, SrcDir} = get_src_dir_from_module(Module),
                 {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
+                %% check if the module is a DTL template.
+                IsDtl = is_erlydtl_template(Module),
                     
-                Options3 = [{i, IncludeDir2} | proplists:delete(i, Options2)],
+                Options3 = [{i, IncludeDir2}, {dtl, IsDtl} | proplists:delete(i, Options2)],
                 {ok, Options3}
             catch _ : _ ->
                     undefined
@@ -82,6 +90,17 @@ get_options_from_module(Module) ->
         _ ->
             {ok, []}
     end.
+
+%% @private This will check if the given module or source file is an ErlyDTL template.
+%% Currently, this is done by checking if its reported source path ends with
+%% ".dtl.erl".
+is_erlydtl_template(Module) when is_atom(Module) ->
+    Props = Module:module_info(compile),
+    Source = proplists:get_value(source, Props, ""),
+    is_erlydtl_template(filename:basename(Source, ".erl"));
+is_erlydtl_template(Source) when is_list(Source) ->
+    % If the path ends with .dtl.erl, it's probably an ErlyDTL template.
+    string:rstr(Source, ".dtl") + (length(".dtl")-1) =:= length(Source).
 
 %% @private This will search back to find an appropriate include directory, by
 %% searching further back than "..". Instead, it will extract the basename
@@ -165,6 +184,7 @@ is_path_decendent(Path) ->
 get_src_dir(Dir) ->
     HasCode =
         filelib:wildcard("*.erl", Dir) /= [] orelse
+        filelib:wildcard("*.dtl", Dir) /= [] orelse
         filelib:wildcard("*.hrl", Dir) /= [],
     if
         HasCode -> {ok,Dir};
