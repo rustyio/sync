@@ -170,9 +170,9 @@ handle_cast(discover_src_dirs, State) ->
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\.erl$") ++ Acc
+        sync_utils:wildcard(X, ".*\.erl$") ++ sync_utils:wildcard(X, ".*\.dtl$") ++ Acc
     end,
-    Files = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
+    ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
     %% For each include dir, get a list of hrl files...
     Fhrl = fun(X, Acc) ->
@@ -184,7 +184,7 @@ handle_cast(discover_src_files, State) ->
     NewTimers = schedule_cast(discover_src_files, 5000, State#state.timers),
 
     %% Return with updated files...
-    NewState = State#state { src_files=Files, hrl_files=HrlFiles, timers=NewTimers },
+    NewState = State#state { src_files=ErlFiles, hrl_files=HrlFiles, timers=NewTimers },
     {noreply, NewState};
 
 handle_cast(compare_beams, State) ->
@@ -431,10 +431,18 @@ process_src_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
     ok.
 
+
+erlydtl_compile(SrcFile, Options) ->
+    erlydtl:compile(SrcFile, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")), Options).
+
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
-    Module = list_to_atom(filename:basename(SrcFile, ".erl")),
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
+
+    {CompileFun, Module} = case sync_utils:is_erlydtl_template(SrcFile) of
+         false -> {fun compile:file/2, list_to_atom(filename:basename(SrcFile, ".erl"))};
+         true -> {fun erlydtl_compile/2, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))}
+     end,
 
     %% Get the old binary code...
     OldBinary = case code:get_object_code(Module) of
@@ -444,7 +452,7 @@ recompile_src_file(SrcFile, _EnablePatching) ->
 
     case sync_options:get_options(SrcDir) of
         {ok, Options} ->
-            case compile:file(SrcFile, [binary, return|Options]) of
+            case CompileFun(SrcFile, [binary, return|Options]) of
                 {ok, Module, OldBinary, Warnings} ->
                     %% Compiling didn't change the beam code. Don't reload...
                     print_results(Module, SrcFile, [], Warnings),
@@ -452,7 +460,7 @@ recompile_src_file(SrcFile, _EnablePatching) ->
 
                 {ok, Module, _Binary, Warnings} ->
                     %% Compiling changed the beam code. Compile and reload.
-                    compile:file(SrcFile, Options),
+                    CompileFun(SrcFile, Options),
                     %% Try to load the module...
                     case code:ensure_loaded(Module) of
                         {module, Module} -> ok;
