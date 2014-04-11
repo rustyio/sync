@@ -157,8 +157,7 @@ handle_cast(discover_src_dirs, State) ->
     {SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
     USortedSrcDirs = lists:usort(SrcDirs),
     USortedHrlDirs = lists:usort(HrlDirs),
-    
-%   InitialDirs = sync_utils:initial_src_dirs(),
+    %% InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...
     NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
@@ -416,13 +415,11 @@ process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], EnableP
             %% File was removed, do nothing...
             process_src_file_lastmod(T1, [{File2, LastMod2}|T2], EnablePatching);
         false ->
-            %% File is new, recompile...
-            recompile_src_file(File2, EnablePatching),
+            maybe_recompile_src_file(File2, LastMod2, EnablePatching),
             process_src_file_lastmod([{File1, LastMod1}|T1], T2, EnablePatching)
     end;
-process_src_file_lastmod([], [{File, _LastMod}|T2], EnablePatching) ->
-    %% File is new, recompile...
-    recompile_src_file(File, EnablePatching),
+process_src_file_lastmod([], [{File, LastMod}|T2], EnablePatching) ->
+    maybe_recompile_src_file(File, LastMod, EnablePatching),
     process_src_file_lastmod([], T2, EnablePatching);
 process_src_file_lastmod([], [], _) ->
     %% Done.
@@ -434,6 +431,23 @@ process_src_file_lastmod(undefined, _Other, _) ->
 
 erlydtl_compile(SrcFile, Options) ->
     erlydtl:compile(SrcFile, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")), Options).
+
+maybe_recompile_src_file(File, LastMod, EnablePatching) ->
+    Module = list_to_atom(filename:basename(File, ".erl")),
+    case code:which(Module) of
+        BeamFile when is_list(BeamFile) ->
+            %% check with beam file
+            case filelib:last_modified(BeamFile) of
+                BeamLastMod when LastMod > BeamLastMod ->
+                    recompile_src_file(File, EnablePatching);
+                _ ->
+                    ok
+            end;
+        _ ->
+            %% File is new, recompile...
+            recompile_src_file(File, EnablePatching)
+    end.
+
 
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
@@ -681,7 +695,7 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
         false ->
             %% File is new, look for src that include it
             WhoInclude = who_include(File2, SrcFiles),
-            [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+            [maybe_recompile_src_file(SrcFile, LastMod2, Patching) || SrcFile <- WhoInclude],
             process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
     end;
 process_hrl_file_lastmod([], [{File, _LastMod}|T2], SrcFiles, Patching) ->
