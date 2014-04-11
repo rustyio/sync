@@ -303,17 +303,13 @@ process_beam_lastmod([{Module, _}|T1], [{Module, _}|T2], EnablePatching, {FirstB
             %% erlang VMs, and save the compiled beam to disk.
             case EnablePatching of
                 true ->
-                    growl_success("Reloaded " ++ atom_to_list(Module) ++ "."),
                     {ok, NumNodes} = load_module_on_all_nodes(Module),
                     Msg = io_lib:format("~s: Reloaded on ~p nodes! (Beam changed.)~n", [Module, NumNodes]),
-                    log_success(Msg),
-                    growl_success("Reloaded " ++ atom_to_list(Module) ++ " on " ++ integer_to_list(NumNodes) ++ " nodes."),
-                    ok;
+                    log_success(Msg);
                 false ->
                     %% Print a status message...
                     Msg = io_lib:format("~s: Reloaded! (Beam changed.)~n", [Module]),
-                    log_success(Msg),
-                    growl_success("Reloaded " ++ atom_to_list(Module) ++ ".")
+                    log_success(Msg)
             end,
             case FirstBeam of
                undefined -> {Module, OtherBeams};
