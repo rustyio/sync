@@ -574,6 +574,10 @@ make_cmd("growlnotify" = Util, Image, Title, Message) ->
     [Util, " -n \"Sync\" --image \"", Image,"\"",
      " -m \"", Message, "\" \"", Title, "\""];
 
+make_cmd("notification_center" = _Util, _Image, Title, Message) ->
+    AppleScript = io_lib:format("display notification \"~s\" with title \"~s\"", [Message, Title]),
+    io_lib:format("osascript -e '~s'", [AppleScript]);
+
 make_cmd("notify-send" = Util, Image, Title, Message) ->
     [Util, " -i \"", Image, "\"",
      " \"", Title, "\" \"", Message, "\" --expire-time=5000"];
