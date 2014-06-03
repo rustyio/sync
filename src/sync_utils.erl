@@ -47,7 +47,7 @@ get_src_dir_from_module(Module)->
 
                     %% is not a descendant, and we fix non-descendants, so let's
                     %% fix it
-                    {_,    false, fix}  -> find_descendant_module(Module, Source);
+                    {_,    false, fix}  -> find_descendant_module(Source, IsFile);
 
                     %% Anything else, and we don't know what to do, so let's
                     %% just bail.
@@ -162,16 +162,21 @@ normalize_case_windows_dir(Dir) ->
 %% path one by one prefixing it with the current working directory until it
 %% either finds a match, or fails.  If it succeeds, it returns the Path to the
 %% new Source file.
-find_descendant_module(Module, Path) ->
+find_descendant_module([], _IsFile) ->
+    undefined;
+find_descendant_module(Path, IsFile) ->
     PathParts = filename:split(Path),
     {ok, Cwd} = file:get_cwd(),
     case find_descendant_module_worker(Cwd, PathParts) of
-        undefined ->
-            error_logger:warning_msg("Sync: Unable to fix the source path~nModule ~p(~p)~nCurrent Working Dir: ~p~nSuggestion: It's possible you want to set the fix_descendants setting in sync.config to 'allow'. Not fixing.", [Module, Path, Cwd]),
-            undefined;
+        undefined -> use_original_file_if_exists(Path, IsFile);
         FoundPath -> FoundPath
     end.
 
+use_original_file_if_exists(Path, IsFile) ->
+    case IsFile of
+        true -> Path;
+        false -> undefined
+    end.
 
 find_descendant_module_worker(_Cwd, []) ->
     undefined;
