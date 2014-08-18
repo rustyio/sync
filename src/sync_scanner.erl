@@ -169,13 +169,13 @@ handle_cast(discover_src_dirs, State) ->
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\.erl$") ++ sync_utils:wildcard(X, ".*\.dtl$") ++ Acc
+        sync_utils:wildcard(X, ".*\\.erl$") ++ sync_utils:wildcard(X, ".*\\.dtl$") ++ Acc
     end,
     ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
     %% For each include dir, get a list of hrl files...
     Fhrl = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\.hrl$") ++ Acc
+        sync_utils:wildcard(X, ".*\\.hrl$") ++ Acc
     end,
     HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
 
