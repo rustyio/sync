@@ -56,6 +56,19 @@ Errors:
 /Code/Webmachine/src/webmachine_dispatcher.erl:250: Error: syntax error before: reconstitute
 ```
 
+## Stopping and Pausing
+
+You can stop the `sync` application entirely (wiping its internal state) with
+`sync:stop()`. You can then restart the application with a new state using `sync:go()`
+
+If, however, you just wish to pause `sync` so that it will not update anything
+during some period, you can pause the scanner with `sync:pause()`.  You might
+do this while upgrading you wish not to have immediately loaded until
+everything is complete. Calling `sync:go()` once again will unpause the scanner.
+
+Bear in mind that running `pause()` will not stop files that are currently
+being compiled.
+
 ## Console Logging
 
 By default, sync will print sucess / warning / failure notifications to the

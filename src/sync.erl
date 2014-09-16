@@ -11,6 +11,7 @@
     start/0,
     patch/0,
     go/0,
+    pause/0,
     info/0,
     stop/0,
     growl/1,growl/0,
@@ -42,6 +43,7 @@ go() ->
         ok ->
             ok;
         {error, {already_started, sync}} ->
+            sync_scanner:unpause(),
             sync_scanner:rescan()
     end.
 
@@ -49,6 +51,11 @@ patch() ->
     go(),
     sync_scanner:enable_patching(),
     ok.
+
+
+pause() ->
+    sync_scanner:pause().
+
 
 info() ->
     sync_scanner:info().

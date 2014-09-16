@@ -9,7 +9,9 @@
     start_link/0,
     rescan/0,
     info/0,
-    enable_patching/0
+    enable_patching/0,
+    pause/0,
+    unpause/0
 ]).
 
 %% gen_server callbacks
@@ -41,7 +43,8 @@
     src_file_lastmod,
     hrl_file_lastmod,
     timers,
-    patching = false
+    patching = false,
+    paused = false
 }).
 
 start_link() ->
@@ -55,6 +58,16 @@ rescan() ->
     gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
     gen_server:cast(?SERVER, compare_hrl_files),
+    ok.
+
+unpause() ->
+    gen_server:cast(?SERVER, unpause),
+    ok.
+
+pause() ->
+    log_success("Pausing Sync. Call sync:go() to restart~n"),
+    growl_success("Pausing Sync"),
+    gen_server:cast(?SERVER, pause),
     ok.
 
 info() ->
@@ -123,6 +136,13 @@ handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+handle_cast(pause, State) ->
+    {noreply, State#state {paused=true}};
+handle_cast(unpause, State) ->
+    {noreply, State#state {paused=false}};
+handle_cast(_, State) when State#state.paused==true ->
+    %% If paused, just absorb the request and do nothing
+    {noreply, State};
 handle_cast(discover_modules, State) ->
     %% Get a list of all loaded non-system modules.
     Modules = (erlang:loaded() -- sync_utils:get_system_modules()),
