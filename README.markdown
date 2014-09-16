@@ -171,6 +171,7 @@ the `executable` configuration parameter:
 Where `TYPE` is:
 + `'auto'` Autodetermine (default behaviour)
 + `'growlnotify'` for Mac / Growl.
++ `'notification_center'` for Mac OS X built-in Notification Center.
 + `'notify-send'` for Linux / libnotify.
 + `'notifu'` for Windows / Notifu.
 + `'emacsclient'` for Emacs notifications.
