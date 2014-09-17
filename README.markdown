@@ -244,10 +244,11 @@ To unregister a post-hook, just call
 
 	sync:onsync(undefined).
 
-## Excluding modules from the scanning process
+## Whitelisting/Excluding modules from the scanning process
 
-Sometimes you may want to prevent some modules from being scanned by sync. To
-achive this just modify `excluded_modules` configuration paramter in the
+Sometimes you may want to focus only on a few modules, or prevent some modules
+from being scanned by sync. To achive this just modify `whitelisted_modules` or
+`excluded_modules` configuration paramter in the
 [node's config file](http://www.erlang.org/doc/man/config.html).
 
 ## Moving Application Location
@@ -293,6 +294,7 @@ Please note that sync loads with the following defaults:
 		{log, all},
 		{non_descendants, fix},
 		{executable, auto},
+		{whitelisted_modules, []}
 		{excluded_modules, []}
 	]}
 ].
