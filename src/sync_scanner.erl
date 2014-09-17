@@ -749,8 +749,29 @@ is_include(HrlFile, [{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}}
 is_include(HrlFile, [_SomeForm | Forms]) ->
     is_include(HrlFile, Forms).
 
-%% @private Filter the excluded modules.
+%% @private Filter the modules to be scanned.
 filter_modules_to_scan(Modules) ->
+    exclude_modules_to_scan(whitelist_modules_to_scan(Modules)).
+
+%% @private Filter the whitelisted modules.
+whitelist_modules_to_scan(Modules) ->
+    case application:get_env(sync, whitelisted_modules) of
+        {ok, WhitelistedModules} when is_list(WhitelistedModules) andalso
+                                   WhitelistedModules =/= []->
+            lists:foldl(fun(Module, Acc) ->
+                                case lists:member(Module, WhitelistedModules) of
+                                    true ->
+                                        [Module | Acc];
+                                    false ->
+                                        Acc
+                                end
+                        end, [], Modules);
+        _ ->
+            Modules
+    end.
+
+%% @private Filter the excluded modules.
+exclude_modules_to_scan(Modules) ->
     case application:get_env(sync, excluded_modules) of
         {ok, ExcludedModules} when is_list(ExcludedModules) andalso
                                    ExcludedModules =/= []->
@@ -762,7 +783,6 @@ filter_modules_to_scan(Modules) ->
                                         [Module | Acc]
                                 end
                         end, [], Modules);
-
         _ ->
             Modules
     end.
