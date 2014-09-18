@@ -759,7 +759,7 @@ whitelist_modules_to_scan(Modules) ->
         {ok, WhitelistedModules} when is_list(WhitelistedModules) andalso
                                    WhitelistedModules =/= []->
             lists:foldl(fun(Module, Acc) ->
-                                case lists:member(Module, WhitelistedModules) of
+                                case module_matches(Module, WhitelistedModules) of
                                     true ->
                                         [Module | Acc];
                                     false ->
@@ -776,7 +776,7 @@ exclude_modules_to_scan(Modules) ->
         {ok, ExcludedModules} when is_list(ExcludedModules) andalso
                                    ExcludedModules =/= []->
             lists:foldl(fun(Module, Acc) ->
-                                case lists:member(Module, ExcludedModules) of
+                                case module_matches(Module, ExcludedModules) of
                                     true ->
                                         Acc;
                                     false ->
@@ -785,4 +785,17 @@ exclude_modules_to_scan(Modules) ->
                         end, [], Modules);
         _ ->
             Modules
+    end.
+
+module_matches(_Module, []) ->
+    false;
+module_matches(Module, [Module2|T]) when is_atom(Module2) ->
+    case Module =:= Module2 of
+        true -> true;
+        false -> module_matches(Module, T)
+    end;
+module_matches(Module, [Pattern|T]) when is_list(Pattern) ->
+    case re:run(atom_to_list(Module), Pattern) of
+        {match, _} -> true;
+        nomatch -> module_matches(Module, T)
     end.
