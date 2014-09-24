@@ -576,14 +576,14 @@ growl(Image, Title, Message) ->
               auto ->
                   case os:type() of
                       {win32, _} ->
-                          make_cmd("notifu", Image, Title, Message);
+                          make_cmd("notifu", ImagePath, Title, Message);
                       {unix,linux} ->
                           make_cmd("notify-send", ImagePath, Title, Message);
                       _ ->
                           make_cmd("growlnotify", ImagePath, Title, Message)
                   end;
               Executable ->
-                  make_cmd(Executable, Image, Title, Message)
+                  make_cmd(Executable, ImagePath, Title, Message)
           end,
     os:cmd(lists:flatten(Cmd)).
 
