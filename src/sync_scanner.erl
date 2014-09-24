@@ -115,8 +115,13 @@ init([]) ->
 
     %% Display startup message...
     case {get_growl(),os:type()} of
-        {true,{unix,_}} -> growl_success("Sync", "The Sync utility is now running.");
-        _ -> io:format("Growl notifications disabled~n") end,
+        {none, _} ->
+            growl_startup_disabled_message();
+        {false, _} -> 
+            growl_startup_disabled_message();
+        _ ->
+            growl_startup_success_message()
+    end,
 
     %% Create the state and return...
     State = #state {
@@ -629,6 +634,12 @@ make_cmd(UnsupportedUtil, _, _, _) ->
 image2notifu_type("success") -> "info";
 image2notifu_type("warnings") -> "warn";
 image2notifu_type("errors") -> "error".
+
+growl_startup_disabled_message() ->
+    io:format("Growl notifications disabled~n").
+
+growl_startup_success_message() ->
+    growl_success("Sync", "The Sync utility is now running.").
 
 growl_success(Message) ->
     growl_success("Success!", Message).
