@@ -469,21 +469,29 @@ maybe_recompile_src_file(File, LastMod, EnablePatching) ->
             recompile_src_file(File, EnablePatching)
     end.
 
+determine_compile_fun_and_module_name(SrcFile) ->
+    case sync_utils:is_erlydtl_template(SrcFile) of
+         false ->
+            {fun compile:file/2,
+             list_to_atom(filename:basename(SrcFile, ".erl"))};
+         true ->
+            {fun erlydtl_compile/2,
+             list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))}
+     end.
+
+get_object_code(Module) ->
+    case code:get_object_code(Module) of
+        {Module, B, _Filename} -> B;
+        _ -> undefined
+    end.
 
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
-
-    {CompileFun, Module} = case sync_utils:is_erlydtl_template(SrcFile) of
-         false -> {fun compile:file/2, list_to_atom(filename:basename(SrcFile, ".erl"))};
-         true -> {fun erlydtl_compile/2, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))}
-     end,
+    {CompileFun, Module} = determine_compile_fun_and_module_name(SrcFile),
 
     %% Get the old binary code...
-    OldBinary = case code:get_object_code(Module) of
-        {Module, B, _Filename} -> B;
-        _ -> undefined
-    end,
+    OldBinary = get_object_code(Module),
 
     case sync_options:get_options(SrcDir) of
         {ok, Options} ->
