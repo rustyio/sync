@@ -1,7 +1,7 @@
 % vim: ts=4 sw=4 et ft=erlang
 {application, sync, [
     {description, "Sync - Automatic Code Reloader"},
-    {applications, [kernel, stdlib, compiler, syntax_tools]},
+    {applications, [kernel, stdlib, compiler]},
     {vsn, "0.1"},
     {registered, []},
     {mod, { sync, []}},
