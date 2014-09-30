@@ -6,7 +6,7 @@ clean:
 
 
 DEPS_PLT=$(CURDIR)/.deps_plt
-DEPS=erts kernel stdlib sasl
+DEPS=erts kernel stdlib sasl compiler crypto hipe syntax_tools
 # removed 'sasl' in attempt to minimize memory usage for Travis
 
 $(DEPS_PLT):
