@@ -320,3 +320,15 @@ that you're free to include in your application. Just be sure to use the
 
 	erl -config sync.config
 
+## Sync with relx
+
+If you use [relx](https://github.com/erlware/relx) and wish to use sync with a
+relx created release, you'll need to add a `syntax_tools` and `compiler` to
+`release` section to your relx.config file:
+
+```erlang
+{release, {your_app, "1.0.0"}, [
+	syntax_tools,
+	compiler
+]}.
+```
