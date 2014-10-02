@@ -264,6 +264,9 @@ from being scanned by sync. To achive this just modify `whitelisted_modules` or
 `excluded_modules` configuration parameter in the
 [node's config file](http://www.erlang.org/doc/man/config.html).
 
+Beyond specifying modules one by one, identified by atoms, you can also specify
+them in bulk, identified by regular expressions, but with a slower sync.
+
 ## Moving Application Location
 
 Previously, if an entire application (like a reltool-generated release) was
