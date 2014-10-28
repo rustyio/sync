@@ -512,8 +512,16 @@ recompile_src_file(SrcFile, _EnablePatching) ->
                     print_results(Module, SrcFile, [], Warnings),
                     {ok, [], Warnings};
 
+                {ok, OtherModule, _Binary, Warnings} ->
+                    Desc = io_lib:format("Module definition (~p) differs from expected (~s)", [OtherModule, filename:rootname(filename:basename(SrcFile))]),
+                
+                    Errors = [{SrcFile, {0, Module, Desc}}],
+                    print_results(Module, SrcFile, Errors, Warnings),
+                    {ok, Errors, Warnings};
+    
                 {error, Errors, Warnings} ->
                     %% Compiling failed. Print the warnings and errors...
+                    io:format("Error: ~p",[Errors]),
                     print_results(Module, SrcFile, Errors, Warnings),
                     {ok, Errors, Warnings}
             end;
@@ -558,10 +566,16 @@ format_errors(File, Errors, Warnings) ->
     AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
     F = fun({Line, Prefix, Module, ErrorDescription}) ->
-        Msg = Module:format_error(ErrorDescription),
+        Msg = format_error(Module, ErrorDescription),
         io_lib:format("~s:~p: ~s: ~s~n", [File, Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
+
+format_error(Module, ErrorDescription) ->
+    case erlang:function_exported(Module, format_error, 1) of
+        true -> Module:format_error(ErrorDescription);
+        false -> io_lib:format("~s", [ErrorDescription])
+    end.
 
 %% @private Print error messages in a pretty and user readable way.
 growl_format_errors(Errors, Warnings) ->
@@ -571,7 +585,7 @@ growl_format_errors(Errors, Warnings) ->
     AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
     F = fun({Line, Prefix, Module, ErrorDescription}) ->
-        Msg = Module:format_error(ErrorDescription),
+        Msg = format_error(Module, ErrorDescription),
         io_lib:format("~p: ~s: ~s~n", [Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
