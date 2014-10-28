@@ -261,8 +261,11 @@ To unregister a post-hook, just call
 
 Sometimes you may want to focus only on a few modules, or prevent some modules
 from being scanned by sync. To achive this just modify `whitelisted_modules` or
-`excluded_modules` configuration paramter in the
+`excluded_modules` configuration parameter in the
 [node's config file](http://www.erlang.org/doc/man/config.html).
+
+Beyond specifying modules one by one, identified by atoms, you can also specify
+them in bulk, identified by regular expressions, but with a slower sync.
 
 ## Moving Application Location
 
