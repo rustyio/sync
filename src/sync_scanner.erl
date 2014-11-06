@@ -521,7 +521,6 @@ recompile_src_file(SrcFile, _EnablePatching) ->
     
                 {error, Errors, Warnings} ->
                     %% Compiling failed. Print the warnings and errors...
-                    io:format("Error: ~p",[Errors]),
                     print_results(Module, SrcFile, Errors, Warnings),
                     {ok, Errors, Warnings}
             end;
