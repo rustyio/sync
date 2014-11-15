@@ -21,12 +21,7 @@ get_src_dir_from_module(Module)->
             try
                 %% Get some module info...
                 Props = Module:module_info(compile),
-                BaseSource = proplists:get_value(source, Props, ""),
-
-                Source = case is_erlydtl_template(Module) of
-                             true -> string:substr(BaseSource, 1, string:rstr(BaseSource, ".erl")-1);
-                             false -> BaseSource
-                         end,
+                Source = proplists:get_value(source, Props, ""),
 
                 %% Ensure that the file exists, is a decendent of the tree, and
                 %% how to deal with that
