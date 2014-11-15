@@ -326,7 +326,7 @@ that you're free to include in your application. Just be sure to use the
 ## Sync with relx
 
 If you use [relx](https://github.com/erlware/relx) and wish to use sync with a
-relx created release, you'll need to add a `syntax_tools` and `compiler` to
+relx created release, you'll need to run relx with -d option (symlink all applications and configuration into the release instead of copying) add a `syntax_tools` and `compiler` to
 `release` section to your relx.config file:
 
 ```erlang
