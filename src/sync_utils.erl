@@ -195,8 +195,11 @@ is_path_decendent(Path) ->
     {ok, Cwd} = file:get_cwd(),
     lists:sublist(Path, length(Cwd)) == Cwd.
 
-%% @private Find the src directory for the specified Directory
+%% @private Find the src directory for the specified Directory; max 15 iterations
 get_src_dir(Dir) ->
+    get_src_dir(Dir, 15).
+
+get_src_dir(Dir, Ctr) ->
     HasCode =
         filelib:wildcard("*.erl", Dir) /= [] orelse
         filelib:wildcard("*.dtl", Dir) /= [] orelse
@@ -204,7 +207,7 @@ get_src_dir(Dir) ->
         filelib:wildcard("*.ex", Dir) /= [],
     if
         HasCode -> {ok,Dir};
-        true -> get_src_dir(filename:dirname(Dir))
+        true -> get_src_dir(filename:dirname(Dir), Ctr - 1)
     end.
 
 %% @private Return all files in a directory matching a regex.
