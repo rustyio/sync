@@ -3,7 +3,7 @@
 -export([
          get_src_dir_from_module/1,
          get_options_from_module/1,
-         is_erlydtl_template/1,
+         get_filetype/1,
          get_src_dir/1,
          wildcard/2,
          get_env/2,
@@ -77,9 +77,9 @@ get_options_from_module(Module) ->
                 {ok, SrcDir} = get_src_dir_from_module(Module),
                 {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
                 %% check if the module is a DTL template.
-                IsDtl = is_erlydtl_template(Module),
+                Type = get_filetype(Module),
                     
-                Options3 = [{i, IncludeDir2}, {dtl, IsDtl} | proplists:delete(i, Options2)],
+                Options3 = [{i, IncludeDir2}, {type, Type} | proplists:delete(i, Options2)],
                 {ok, Options3}
             catch _ : _ ->
                     undefined
@@ -91,13 +91,20 @@ get_options_from_module(Module) ->
 %% @private This will check if the given module or source file is an ErlyDTL template.
 %% Currently, this is done by checking if its reported source path ends with
 %% ".dtl.erl".
-is_erlydtl_template(Module) when is_atom(Module) ->
+get_filetype(Module) when is_atom(Module) ->
     Props = Module:module_info(compile),
     Source = proplists:get_value(source, Props, ""),
-    is_erlydtl_template(filename:basename(Source, ".erl"));
-is_erlydtl_template(Source) when is_list(Source) ->
-    % If the path ends with .dtl.erl, it's probably an ErlyDTL template.
-    string:rstr(Source, ".dtl") + (length(".dtl")-1) =:= length(Source).
+    get_filetype(Source);
+
+get_filetype(Source) when is_list(Source) ->
+    Ext = filename:extension(Source),
+    Root = filename:rootname(Source),
+    SecondExt = filename:extension(Root),
+    case Ext of
+        ".erl" when SecondExt =:= ".dtl" -> dtl;
+        ".erl" -> erl;
+        ".ex" -> elixir
+    end.
 
 %% @private This will search back to find an appropriate include directory, by
 %% searching further back than "..". Instead, it will extract the basename
@@ -193,7 +200,8 @@ get_src_dir(Dir) ->
     HasCode =
         filelib:wildcard("*.erl", Dir) /= [] orelse
         filelib:wildcard("*.dtl", Dir) /= [] orelse
-        filelib:wildcard("*.hrl", Dir) /= [],
+        filelib:wildcard("*.hrl", Dir) /= [] orelse
+        filelib:wildcard("*.ex", Dir) /= [],
     if
         HasCode -> {ok,Dir};
         true -> get_src_dir(filename:dirname(Dir))
