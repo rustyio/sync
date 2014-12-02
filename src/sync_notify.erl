@@ -68,7 +68,8 @@ growl(Image, Title, Message) ->
               Executable ->
                   make_cmd(Executable, ImagePath, Title, Message)
           end,
-    os:cmd(lists:flatten(Cmd)).
+    Cmd2 = lists:flatten(Cmd),
+    os:cmd(Cmd2).
 
 make_cmd(Util, Image, Title, Message) when is_atom(Util) ->
     make_cmd(atom_to_list(Util), Image, Title, Message);
@@ -87,8 +88,10 @@ make_cmd("notify-send" = Util, Image, Title, Message) ->
 
 make_cmd("notifu" = Util, Image, Title, Message) ->
     %% see http://www.paralint.com/projects/notifu/
-    [Util, " /q /d 5000 /t ", image2notifu_type(Image), " ",
-     "/p \"", Title, "\" /m \"", Message, "\""];
+    Type = image2notifu_type(Image),
+    ImageWin = windows_image(Image),
+    [Util, " /q /d 5000 /i \"", ImageWin, "\" /t ", Type,
+     " /p \"", Title, "\" /m \"", Message, "\""];
 
 make_cmd("emacsclient" = Util, "warnings", Title, Message0) ->
     Message = lisp_format(Message0),
@@ -109,9 +112,16 @@ make_cmd(UnsupportedUtil, _, _, _) ->
                                        "named 'executable' has unsupported value: ~p",
                                        [UnsupportedUtil]))).
 
-image2notifu_type("success") -> "info";
-image2notifu_type("warnings") -> "warn";
-image2notifu_type("errors") -> "error".
+windows_image(Image) ->
+    FixedSlashes = string:join(string:tokens(Image, "/"),"\\"),
+    filename:rootname(FixedSlashes) ++ ".ico".
+
+image2notifu_type(Image) ->
+    case filename:rootname(filename:basename(Image)) of
+        "success" -> "info";
+        "warnings" -> "warn";
+        "errors" -> "error"
+    end.
 
 growl_startup_disabled_message() ->
     io:format("Growl notifications disabled~n").
