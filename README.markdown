@@ -310,7 +310,7 @@ Please note that sync loads with the following defaults:
 		{log, all},
 		{non_descendants, fix},
 		{executable, auto},
-		{whitelisted_modules, []}
+		{whitelisted_modules, []},
 		{excluded_modules, []}
 	]}
 ].
