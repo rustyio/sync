@@ -156,33 +156,14 @@ handle_cast(discover_modules, State) ->
     {noreply, NewState};
 
 handle_cast(discover_src_dirs, State) ->
-    %% Extract the compile / options / source / dir from each module.
-    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
-        %% Get the dir...
-        case sync_utils:get_src_dir_from_module(X) of
-            {ok, SrcDir} ->
-                %% Get the options, store under the dir...
-                {ok, Options} = sync_utils:get_options_from_module(X),
-                %% Store the options for later reference...
-                sync_options:set_options(SrcDir, Options),
-                HrlDir = proplists:get_value(i, Options, []),
-                %% Return the dir...
-                {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
-            undefined ->
-                Acc
-        end
-    end,
-    {SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
-    USortedSrcDirs = lists:usort(SrcDirs),
-    USortedHrlDirs = lists:usort(HrlDirs),
-    %% InitialDirs = sync_utils:initial_src_dirs(),
-
-    %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
-
-    %% Return with updated dirs...
-    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
-    {noreply, NewState};
+    case application:get_env(sync, src_dirs) of
+        undefined ->
+            discover_source_dirs(State, []);
+        {ok, {add, DirsAndOpts}} ->
+            discover_source_dirs(State, dirs(DirsAndOpts));
+        {ok, {replace, DirsAndOpts}} ->
+            {noreply, State#state{src_dirs = dirs(DirsAndOpts), hrl_dirs = []}}
+    end;
 
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
@@ -272,6 +253,9 @@ handle_cast(enable_patching, State) ->
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+dirs(DirsAndOpts) ->
+    [begin sync_options:set_options(Dir, Opts), Dir end || {Dir, Opts} <- DirsAndOpts].
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -697,3 +681,33 @@ module_matches(Module, [Pattern|T]) when is_list(Pattern) ->
         {match, _} -> true;
         nomatch -> module_matches(Module, T)
     end.
+
+
+discover_source_dirs(State, ExtraDirs) ->
+    %% Extract the compile / options / source / dir from each module.
+    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
+        %% Get the dir...
+        case sync_utils:get_src_dir_from_module(X) of
+            {ok, SrcDir} ->
+                %% Get the options, store under the dir...
+                {ok, Options} = sync_utils:get_options_from_module(X),
+                %% Store the options for later reference...
+                sync_options:set_options(SrcDir, Options),
+                HrlDir = proplists:get_value(i, Options, []),
+                %% Return the dir...
+                {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
+            undefined ->
+                Acc
+        end
+    end,
+    {SrcDirs, HrlDirs} = lists:foldl(F, {ExtraDirs, []}, State#state.modules),
+    USortedSrcDirs = lists:usort(SrcDirs),
+    USortedHrlDirs = lists:usort(HrlDirs),
+    %% InitialDirs = sync_utils:initial_src_dirs(),
+
+    %% Schedule the next interval...
+    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
+
+    %% Return with updated dirs...
+    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
+    {noreply, NewState}.
