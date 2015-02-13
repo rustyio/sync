@@ -33,16 +33,18 @@
 -define(LOG_OR_GROWL_ON(Val),Val==true;Val==all;Val==skip_success;is_list(Val),Val=/=[]).
 -define(LOG_OR_GROWL_OFF(Val),Val==false;F==none;F==[]).
 
+-type timestamp() :: file:date_time() | 0.
+
 -record(state, {
-    modules,
-    src_dirs,
-    src_files,
-    hrl_dirs,
-    hrl_files,
-    beam_lastmod,
-    src_file_lastmod,
-    hrl_file_lastmod,
-    timers,
+    modules = [] :: [module()],
+    src_dirs = [] :: [file:filename()],
+    src_files = [] :: [file:filename()],
+    hrl_dirs = [] :: [file:filename()],
+    hrl_files = [] :: [file:filename()],
+    beam_lastmod = undefined :: [{module(), timestamp()}],
+    src_file_lastmod = [] :: [{file:filename(), timestamp()}],
+    hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
+    timers = [],
     patching = false,
     paused = false
 }).
@@ -55,8 +57,8 @@ rescan() ->
     gen_server:cast(?SERVER, discover_modules),
     gen_server:cast(?SERVER, discover_src_dirs),
     gen_server:cast(?SERVER, discover_src_files),
-    gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
+    gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_hrl_files),
     ok.
 
@@ -116,19 +118,7 @@ init([]) ->
     %% Display startup message...
     sync_notify:startup(get_growl()),
 
-    %% Create the state and return...
-    State = #state {
-        modules = [],
-        src_dirs = [],
-        src_files = [],
-        hrl_dirs = [],
-        hrl_files = [],
-        beam_lastmod = undefined,
-        src_file_lastmod = undefined,
-        hrl_file_lastmod = undefined,
-        timers=[]
-    },
-    {ok, State}.
+    {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -255,7 +245,19 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 dirs(DirsAndOpts) ->
-    [begin sync_options:set_options(Dir, Opts), Dir end || {Dir, Opts} <- DirsAndOpts].
+    [begin 
+         sync_options:set_options(Dir, Opts),
+         
+         %% ensure module out path exists & in our code list
+         case proplists:get_value(outdir, Opts) of
+             undefined ->
+                 true;
+             Path ->
+                 ok = filelib:ensure_dir(filename:join(Path, "sample")),
+                 true = code:add_pathz(Path)
+         end,
+         Dir 
+     end || {Dir, Opts} <- DirsAndOpts].
 
 handle_info(_Info, State) ->
     {noreply, State}.
