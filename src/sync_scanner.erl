@@ -43,7 +43,7 @@
     hrl_files = [] :: [file:filename()],
     beam_lastmod = undefined :: [{module(), timestamp()}],
     src_file_lastmod = [] :: [{file:filename(), timestamp()}],
-    hrl_file_lastmod = undefined :: [{file:filename(), timestamp()}],
+    hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
     timers = [],
     patching = false,
     paused = false
@@ -602,10 +602,10 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
             [maybe_recompile_src_file(SrcFile, LastMod2, Patching) || SrcFile <- WhoInclude],
             process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
     end;
-process_hrl_file_lastmod([], [{File, _LastMod}|T2], SrcFiles, Patching) ->
+process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFiles, Patching) ->
     %% File is new, look for src that include it
     WhoInclude = who_include(File, SrcFiles),
-    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+    [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
     process_hrl_file_lastmod([], T2, SrcFiles, Patching);
 process_hrl_file_lastmod([], [], _, _) ->
     %% Done
