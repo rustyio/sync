@@ -158,7 +158,7 @@ handle_cast(discover_src_dirs, State) ->
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.erl$") ++ sync_utils:wildcard(X, ".*\\.dtl$") ++ Acc
+        sync_utils:wildcard(X, ".*\\.(erl|dtl|ex)$") ++ Acc
     end,
     ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
@@ -432,6 +432,18 @@ process_src_file_lastmod(undefined, _Other, _) ->
 erlydtl_compile(SrcFile, Options) ->
     erlydtl:compile(SrcFile, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")), Options).
 
+elixir_compile(SrcFile, Options) ->
+    Outdir = proplists:get_value(outdir, Options),
+    Modules = 'Elixir.Kernel.ParallelCompiler':files_to_path([list_to_binary(SrcFile)], list_to_binary(Outdir)),
+    Loader = fun(Module) ->
+        Outfile = code:which(Module),
+        Binary = file:read_file(Outfile),
+        {Module, Binary}
+    end,
+    Results = lists:map(Loader, Modules),
+    {ok, multiple, Results, []}.
+
+
 maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     Module = list_to_atom(filename:basename(File, ".erl")),
     case code:which(Module) of
@@ -449,13 +461,16 @@ maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     end.
 
 determine_compile_fun_and_module_name(SrcFile) ->
-    case sync_utils:is_erlydtl_template(SrcFile) of
-         false ->
+    case sync_utils:get_filetype(SrcFile) of
+        erl ->
             {fun compile:file/2,
-             list_to_atom(filename:basename(SrcFile, ".erl"))};
-         true ->
+            list_to_atom(filename:basename(SrcFile, ".erl"))};
+        dtl ->
             {fun erlydtl_compile/2,
-             list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))}
+            list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))};
+        elixir ->
+            {fun elixir_compile/2,
+            list_to_atom(filename:basename(SrcFile, ".ex"))}
      end.
 
 get_object_code(Module) ->
@@ -463,6 +478,29 @@ get_object_code(Module) ->
         {Module, B, _Filename} -> B;
         _ -> undefined
     end.
+
+reload_if_necessary(_CompileFun, SrcFile, Module, Binary, Binary, _Options, Warnings) ->
+    %% Compiling didn't change the beam code. Don't reload...
+    print_results(Module, SrcFile, [], Warnings),
+    {ok, [], Warnings};
+
+reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, Warnings) ->
+    %% Compiling changed the beam code. Compile and reload.
+    CompileFun(SrcFile, Options),
+    %% Try to load the module...
+    case code:ensure_loaded(Module) of
+        {module, Module} -> ok;
+        {error, embedded} ->
+            %% Module is not yet loaded, load it.
+            case code:load_file(Module) of
+                {module, Module} -> ok
+            end
+    end,
+    gen_server:cast(?SERVER, compare_beams),
+
+    %% Print the warnings...
+    print_results(Module, SrcFile, [], Warnings),
+    {ok, [], Warnings}.
 
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
@@ -475,27 +513,14 @@ recompile_src_file(SrcFile, _EnablePatching) ->
     case sync_options:get_options(SrcDir) of
         {ok, Options} ->
             case CompileFun(SrcFile, [binary, return|Options]) of
-                {ok, Module, OldBinary, Warnings} ->
-                    %% Compiling didn't change the beam code. Don't reload...
-                    print_results(Module, SrcFile, [], Warnings),
-                    {ok, [], Warnings};
+                {ok, Module, Binary, Warnings} ->
+                    reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings);
 
-                {ok, Module, _Binary, Warnings} ->
-                    %% Compiling changed the beam code. Compile and reload.
-                    CompileFun(SrcFile, Options),
-                    %% Try to load the module...
-                    case code:ensure_loaded(Module) of
-                        {module, Module} -> ok;
-                        {error, embedded} ->
-                            %% Module is not yet loaded, load it.
-                            case code:load_file(Module) of
-                                {module, Module} -> ok
-                            end
+                {ok, multiple, Results, Warnings} ->
+                    Reloader = fun({CompiledModule, Binary}) ->
+                        {ok, _, _} = reload_if_necessary(CompileFun, SrcFile, CompiledModule, OldBinary, Binary, Options, Warnings)
                     end,
-                    gen_server:cast(?SERVER, compare_beams),
-
-                    %% Print the warnings...
-                    print_results(Module, SrcFile, [], Warnings),
+                    lists:foreach(Reloader, Results),
                     {ok, [], Warnings};
 
                 {ok, OtherModule, _Binary, Warnings} ->
