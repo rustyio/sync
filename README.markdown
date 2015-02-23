@@ -19,7 +19,7 @@ recompiles the code, and reloads the module.
 ```erlang
 {deps, [
 		{sync, ".*",
-			{git, "git@github.com:lol4t0/sync.git", {branch, "master"}}}
+			{git, "git://github.com/rustyio/sync.git", {branch, "master"}}}
 ]}.
 ```
 
