@@ -14,13 +14,24 @@ recompiles the code, and reloads the module.
 
 ## How can I use Sync?
 
-The recommended approach is to put sync in your $ERL_LIBS directory.
+### Install via rebar dependency
+
+```erlang
+{deps, [
+		{sync, ".*",
+			{git, "git://github.com/rustyio/sync.git", {branch, "master"}}}
+]}.
+```
+
+### Manual install
 
 ```bash
 cd $ERL_LIBS
 git clone git@github.com:rustyio/sync.git
 (cd sync; make)
 ```
+
+The recommended approach is to put sync in your $ERL_LIBS directory.
 
 Then, go in the Erlang console of an application you are developing, run
 `sync:go().`. You can also start sync using `application:start(sync).`
@@ -68,6 +79,36 @@ everything is complete. Calling `sync:go()` once again will unpause the scanner.
 
 Bear in mind that running `pause()` will not stop files that are currently
 being compiled.
+
+## Specifying folders to sync
+
+To your erlang `config` add
+
+```erlang
+[
+    {sync, [
+        {src_dirs, {strategy(), [src_dir_descr()]}}
+    ]}
+].
+```
+```erlang
+-type strategy() :: add | replace.
+````
+If `strategy()` is `replace`, sync will use ONLY specified dirs to sync. If `strategy()` is `add`, sync will add specific dirs to list of dirs to sync.
+
+```erlang
+-type src_dir_descr() :: { Dir :: file:filename(), [Options :: compile_option()]}.
+```
+You probably want to specify `outdir` compile option.
+
+For example
+```erlang
+[
+    {sync, [
+        {src_dirs, {replace, [{"./priv/plugins", [{outdir,"./priv/plugins_bin"}]}]}}
+    ]}
+].
+```
 
 ## Console Logging
 
@@ -310,7 +351,7 @@ Please note that sync loads with the following defaults:
 		{log, all},
 		{non_descendants, fix},
 		{executable, auto},
-		{whitelisted_modules, []}
+		{whitelisted_modules, []},
 		{excluded_modules, []}
 	]}
 ].

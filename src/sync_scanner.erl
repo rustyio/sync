@@ -33,16 +33,18 @@
 -define(LOG_OR_GROWL_ON(Val),Val==true;Val==all;Val==skip_success;is_list(Val),Val=/=[]).
 -define(LOG_OR_GROWL_OFF(Val),Val==false;F==none;F==[]).
 
+-type timestamp() :: file:date_time() | 0.
+
 -record(state, {
-    modules,
-    src_dirs,
-    src_files,
-    hrl_dirs,
-    hrl_files,
-    beam_lastmod,
-    src_file_lastmod,
-    hrl_file_lastmod,
-    timers,
+    modules = [] :: [module()],
+    src_dirs = [] :: [file:filename()],
+    src_files = [] :: [file:filename()],
+    hrl_dirs = [] :: [file:filename()],
+    hrl_files = [] :: [file:filename()],
+    beam_lastmod = undefined :: [{module(), timestamp()}],
+    src_file_lastmod = [] :: [{file:filename(), timestamp()}],
+    hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
+    timers = [],
     patching = false,
     paused = false
 }).
@@ -55,8 +57,8 @@ rescan() ->
     gen_server:cast(?SERVER, discover_modules),
     gen_server:cast(?SERVER, discover_src_dirs),
     gen_server:cast(?SERVER, discover_src_files),
-    gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_src_files),
+    gen_server:cast(?SERVER, compare_beams),
     gen_server:cast(?SERVER, compare_hrl_files),
     ok.
 
@@ -116,19 +118,7 @@ init([]) ->
     %% Display startup message...
     sync_notify:startup(get_growl()),
 
-    %% Create the state and return...
-    State = #state {
-        modules = [],
-        src_dirs = [],
-        src_files = [],
-        hrl_dirs = [],
-        hrl_files = [],
-        beam_lastmod = undefined,
-        src_file_lastmod = undefined,
-        hrl_file_lastmod = undefined,
-        timers=[]
-    },
-    {ok, State}.
+    {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -156,38 +146,19 @@ handle_cast(discover_modules, State) ->
     {noreply, NewState};
 
 handle_cast(discover_src_dirs, State) ->
-    %% Extract the compile / options / source / dir from each module.
-    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
-        %% Get the dir...
-        case sync_utils:get_src_dir_from_module(X) of
-            {ok, SrcDir} ->
-                %% Get the options, store under the dir...
-                {ok, Options} = sync_utils:get_options_from_module(X),
-                %% Store the options for later reference...
-                sync_options:set_options(SrcDir, Options),
-                HrlDir = proplists:get_value(i, Options, []),
-                %% Return the dir...
-                {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
-            undefined ->
-                Acc
-        end
-    end,
-    {SrcDirs, HrlDirs} = lists:foldl(F, {[], []}, State#state.modules),
-    USortedSrcDirs = lists:usort(SrcDirs),
-    USortedHrlDirs = lists:usort(HrlDirs),
-    %% InitialDirs = sync_utils:initial_src_dirs(),
-
-    %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
-
-    %% Return with updated dirs...
-    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
-    {noreply, NewState};
+    case application:get_env(sync, src_dirs) of
+        undefined ->
+            discover_source_dirs(State, []);
+        {ok, {add, DirsAndOpts}} ->
+            discover_source_dirs(State, dirs(DirsAndOpts));
+        {ok, {replace, DirsAndOpts}} ->
+            {noreply, State#state{src_dirs = dirs(DirsAndOpts), hrl_dirs = []}}
+    end;
 
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.erl$") ++ sync_utils:wildcard(X, ".*\\.dtl$") ++ Acc
+        sync_utils:wildcard(X, ".*\\.(erl|dtl|ex)$") ++ Acc
     end,
     ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
@@ -272,6 +243,21 @@ handle_cast(enable_patching, State) ->
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+dirs(DirsAndOpts) ->
+    [begin 
+         sync_options:set_options(Dir, Opts),
+         
+         %% ensure module out path exists & in our code list
+         case proplists:get_value(outdir, Opts) of
+             undefined ->
+                 true;
+             Path ->
+                 ok = filelib:ensure_dir(filename:join(Path, "sample")),
+                 true = code:add_pathz(Path)
+         end,
+         Dir 
+     end || {Dir, Opts} <- DirsAndOpts].
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -446,6 +432,18 @@ process_src_file_lastmod(undefined, _Other, _) ->
 erlydtl_compile(SrcFile, Options) ->
     erlydtl:compile(SrcFile, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")), Options).
 
+elixir_compile(SrcFile, Options) ->
+    Outdir = proplists:get_value(outdir, Options),
+    Modules = 'Elixir.Kernel.ParallelCompiler':files_to_path([list_to_binary(SrcFile)], list_to_binary(Outdir)),
+    Loader = fun(Module) ->
+        Outfile = code:which(Module),
+        Binary = file:read_file(Outfile),
+        {Module, Binary}
+    end,
+    Results = lists:map(Loader, Modules),
+    {ok, multiple, Results, []}.
+
+
 maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     Module = list_to_atom(filename:basename(File, ".erl")),
     case code:which(Module) of
@@ -463,13 +461,16 @@ maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     end.
 
 determine_compile_fun_and_module_name(SrcFile) ->
-    case sync_utils:is_erlydtl_template(SrcFile) of
-         false ->
+    case sync_utils:get_filetype(SrcFile) of
+        erl ->
             {fun compile:file/2,
-             list_to_atom(filename:basename(SrcFile, ".erl"))};
-         true ->
+            list_to_atom(filename:basename(SrcFile, ".erl"))};
+        dtl ->
             {fun erlydtl_compile/2,
-             list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))}
+            list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))};
+        elixir ->
+            {fun elixir_compile/2,
+            list_to_atom(filename:basename(SrcFile, ".ex"))}
      end.
 
 get_object_code(Module) ->
@@ -477,6 +478,29 @@ get_object_code(Module) ->
         {Module, B, _Filename} -> B;
         _ -> undefined
     end.
+
+reload_if_necessary(_CompileFun, SrcFile, Module, Binary, Binary, _Options, Warnings) ->
+    %% Compiling didn't change the beam code. Don't reload...
+    print_results(Module, SrcFile, [], Warnings),
+    {ok, [], Warnings};
+
+reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, Warnings) ->
+    %% Compiling changed the beam code. Compile and reload.
+    CompileFun(SrcFile, Options),
+    %% Try to load the module...
+    case code:ensure_loaded(Module) of
+        {module, Module} -> ok;
+        {error, embedded} ->
+            %% Module is not yet loaded, load it.
+            case code:load_file(Module) of
+                {module, Module} -> ok
+            end
+    end,
+    gen_server:cast(?SERVER, compare_beams),
+
+    %% Print the warnings...
+    print_results(Module, SrcFile, [], Warnings),
+    {ok, [], Warnings}.
 
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
@@ -489,27 +513,14 @@ recompile_src_file(SrcFile, _EnablePatching) ->
     case sync_options:get_options(SrcDir) of
         {ok, Options} ->
             case CompileFun(SrcFile, [binary, return|Options]) of
-                {ok, Module, OldBinary, Warnings} ->
-                    %% Compiling didn't change the beam code. Don't reload...
-                    print_results(Module, SrcFile, [], Warnings),
-                    {ok, [], Warnings};
+                {ok, Module, Binary, Warnings} ->
+                    reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings);
 
-                {ok, Module, _Binary, Warnings} ->
-                    %% Compiling changed the beam code. Compile and reload.
-                    CompileFun(SrcFile, Options),
-                    %% Try to load the module...
-                    case code:ensure_loaded(Module) of
-                        {module, Module} -> ok;
-                        {error, embedded} ->
-                            %% Module is not yet loaded, load it.
-                            case code:load_file(Module) of
-                                {module, Module} -> ok
-                            end
+                {ok, multiple, Results, Warnings} ->
+                    Reloader = fun({CompiledModule, Binary}) ->
+                        {ok, _, _} = reload_if_necessary(CompileFun, SrcFile, CompiledModule, OldBinary, Binary, Options, Warnings)
                     end,
-                    gen_server:cast(?SERVER, compare_beams),
-
-                    %% Print the warnings...
-                    print_results(Module, SrcFile, [], Warnings),
+                    lists:foreach(Reloader, Results),
                     {ok, [], Warnings};
 
                 {ok, OtherModule, _Binary, Warnings} ->
@@ -616,10 +627,10 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
             [maybe_recompile_src_file(SrcFile, LastMod2, Patching) || SrcFile <- WhoInclude],
             process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
     end;
-process_hrl_file_lastmod([], [{File, _LastMod}|T2], SrcFiles, Patching) ->
+process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFiles, Patching) ->
     %% File is new, look for src that include it
     WhoInclude = who_include(File, SrcFiles),
-    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
+    [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
     process_hrl_file_lastmod([], T2, SrcFiles, Patching);
 process_hrl_file_lastmod([], [], _, _) ->
     %% Done
@@ -697,3 +708,33 @@ module_matches(Module, [Pattern|T]) when is_list(Pattern) ->
         {match, _} -> true;
         nomatch -> module_matches(Module, T)
     end.
+
+
+discover_source_dirs(State, ExtraDirs) ->
+    %% Extract the compile / options / source / dir from each module.
+    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
+        %% Get the dir...
+        case sync_utils:get_src_dir_from_module(X) of
+            {ok, SrcDir} ->
+                %% Get the options, store under the dir...
+                {ok, Options} = sync_utils:get_options_from_module(X),
+                %% Store the options for later reference...
+                sync_options:set_options(SrcDir, Options),
+                HrlDir = proplists:get_value(i, Options, []),
+                %% Return the dir...
+                {[SrcDir|SrcAcc], [HrlDir|HrlAcc]};
+            undefined ->
+                Acc
+        end
+    end,
+    {SrcDirs, HrlDirs} = lists:foldl(F, {ExtraDirs, []}, State#state.modules),
+    USortedSrcDirs = lists:usort(SrcDirs),
+    USortedHrlDirs = lists:usort(HrlDirs),
+    %% InitialDirs = sync_utils:initial_src_dirs(),
+
+    %% Schedule the next interval...
+    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
+
+    %% Return with updated dirs...
+    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
+    {noreply, NewState}.
