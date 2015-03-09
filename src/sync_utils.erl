@@ -81,8 +81,15 @@ get_options_from_module(Module) ->
                     
                 Options3 = [{i, IncludeDir2}, {type, Type} | proplists:delete(i, Options2)],
                 {ok, Options3}
-            catch _ : _ ->
-                    undefined
+            catch ExType:Error ->
+                Msg =
+                    [
+                        io_lib:format(
+                            "~p:0: ~p looking for options: ~p. Stack: ~p~n",
+                            [Module, ExType, Error, erlang:get_stacktrace()])
+                    ],
+                sync_notify:log_warnings(Msg),
+                {ok, []}
             end;
         _ ->
             {ok, []}
@@ -102,6 +109,7 @@ get_filetype(Source) when is_list(Source) ->
     SecondExt = filename:extension(Root),
     case Ext of
         ".erl" when SecondExt =:= ".dtl" -> dtl;
+        ".dtl" -> dtl;
         ".erl" -> erl;
         ".ex" -> elixir
     end.
