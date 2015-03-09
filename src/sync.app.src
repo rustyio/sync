@@ -2,7 +2,7 @@
 {application, sync, [
     {description, "Sync - Automatic Code Reloader"},
     {applications, [kernel, stdlib]},
-    {vsn, "0.1.2"},
+    {vsn, "0.1.3"},
     {registered, []},
     {mod, { sync, []}},
     {env, [
