@@ -430,7 +430,16 @@ process_src_file_lastmod(undefined, _Other, _) ->
 
 
 erlydtl_compile(SrcFile, Options) ->
-    erlydtl:compile(SrcFile, list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")), Options).
+    DtlOptions =
+        case lists:keytake(outdir, 1, Options) of
+            false -> Options;
+            {value, {outdir, OutDir}, OtherOptions} ->
+                [{out_dir, OutDir} | OtherOptions]
+        end,
+    Module =
+        list_to_atom(
+            lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")),
+    erlydtl:compile(SrcFile, Module, DtlOptions).
 
 elixir_compile(SrcFile, Options) ->
     Outdir = proplists:get_value(outdir, Options),
