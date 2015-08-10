@@ -439,11 +439,13 @@ erlydtl_compile(SrcFile, Options) ->
     Module =
         list_to_atom(
             lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")),
-    erlydtl:compile(SrcFile, Module, DtlOptions).
+    Compiler = erlydtl,
+    Compiler:compile(SrcFile, Module, DtlOptions).
 
 elixir_compile(SrcFile, Options) ->
     Outdir = proplists:get_value(outdir, Options),
-    Modules = 'Elixir.Kernel.ParallelCompiler':files_to_path([list_to_binary(SrcFile)], list_to_binary(Outdir)),
+    Compiler = 'Elixir.Kernel.ParallelCompiler',
+    Modules = Compiler:files_to_path([list_to_binary(SrcFile)], list_to_binary(Outdir)),
     Loader = fun(Module) ->
         Outfile = code:which(Module),
         Binary = file:read_file(Outfile),
