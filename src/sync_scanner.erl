@@ -499,6 +499,13 @@ reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, W
     %% Try to load the module...
     case code:ensure_loaded(Module) of
         {module, Module} -> ok;
+        {error, nofile} ->
+            Msg =
+                [
+                    io_lib:format(
+                        "~p:0: Couldn't load module: nofile~n", [Module])
+                ],
+            sync_notify:log_warnings(Msg);
         {error, embedded} ->
             %% Module is not yet loaded, load it.
             case code:load_file(Module) of
