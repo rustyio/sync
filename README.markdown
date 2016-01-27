@@ -31,10 +31,14 @@ git clone git@github.com:rustyio/sync.git
 (cd sync; make)
 ```
 
-The recommended approach is to put sync in your $ERL_LIBS directory.
+The recommended approach is to put sync in your `$ERL_LIBS` directory.
 
 Then, go in the Erlang console of an application you are developing, run
-`sync:go().`. You can also start sync using `application:start(sync).`
+`sync:go().`. You can also start sync using `application:start(sync).` but this
+will require you to have `sync`'s dependencies started as well: `syntax_tools`
+and `compiler`.
+
+It's generally just recommended to do `sync:go().`
 
 Starting up:
 

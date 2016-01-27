@@ -36,10 +36,12 @@
 %% ----------------------------------------------------------------------
 
 start() ->
+    application:start(compiler),
+    application:start(syntax_tools),
     application:start(sync).
 
 go() ->
-    case application:start(sync) of
+    case start() of
         ok ->
             ok;
         {error, {already_started, sync}} ->
