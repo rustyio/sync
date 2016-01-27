@@ -367,17 +367,3 @@ that you're free to include in your application. Remember to use the
 `-config` switch for the `erl` program:
 
 	erl -config sync.config
-
-## Sync with relx
-
-If you use [relx](https://github.com/erlware/relx) and wish to use sync with a
-relx created release, you'll need to run relx with -d option (symlink all
-applications and configuration into the release instead of copying) add a
-`syntax_tools` and `compiler` to `release` section to your relx.config file:
-
-```erlang
-{release, {your_app, "1.0.0"}, [
-	syntax_tools,
-	compiler
-]}.
-```
