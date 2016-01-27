@@ -338,12 +338,6 @@ config:
 
 * `ignore`: If a file is not a descendant, sync will completely ignore it.
 
-## A note about Nitrogen
-
-The `{sync_mode, nitrogen}` option is no longer necessary for users of the
-[Nitrogen Web Framework](http://nitrogenproject.com) and will be ignored. Sync
-works with Nitrogen without that option.
-
 ## Sample Configuration File
 
 Please note that sync loads with the following defaults:
