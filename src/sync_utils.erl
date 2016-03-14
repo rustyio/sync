@@ -111,6 +111,7 @@ get_filetype(Source) when is_list(Source) ->
         ".erl" when SecondExt =:= ".dtl" -> dtl;
         ".dtl" -> dtl;
         ".erl" -> erl;
+        ".lfe" -> lfe;
         ".ex" -> elixir
     end.
 
@@ -214,6 +215,7 @@ get_src_dir(Dir, Ctr) ->
         filelib:wildcard("*.erl", Dir) /= [] orelse
         filelib:wildcard("*.dtl", Dir) /= [] orelse
         filelib:wildcard("*.hrl", Dir) /= [] orelse
+        filelib:wildcard("*.lfe", Dir) /= [] orelse
         filelib:wildcard("*.ex", Dir) /= [],
     if
         HasCode -> {ok,Dir};
