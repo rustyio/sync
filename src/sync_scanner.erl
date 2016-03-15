@@ -158,7 +158,7 @@ handle_cast(discover_src_dirs, State) ->
 handle_cast(discover_src_files, State) ->
     %% For each source dir, get a list of source files...
     F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.(erl|dtl|ex)$") ++ Acc
+        sync_utils:wildcard(X, ".*\\.(erl|dtl|lfe|ex)$") ++ Acc
     end,
     ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
 
@@ -454,6 +454,9 @@ elixir_compile(SrcFile, Options) ->
     Results = lists:map(Loader, Modules),
     {ok, multiple, Results, []}.
 
+lfe_compile(SrcFile, Options) ->
+    Compiler = lfe_comp,
+    Compiler:file(SrcFile, Options).
 
 maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     Module = list_to_atom(filename:basename(File, ".erl")),
@@ -479,6 +482,9 @@ determine_compile_fun_and_module_name(SrcFile) ->
         dtl ->
             {fun erlydtl_compile/2,
             list_to_atom(lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl"))};
+        lfe ->
+            {fun lfe_compile/2,
+            list_to_atom(filename:basename(SrcFile, ".lfe"))};
         elixir ->
             {fun elixir_compile/2,
             list_to_atom(filename:basename(SrcFile, ".ex"))}
@@ -533,6 +539,9 @@ recompile_src_file(SrcFile, _EnablePatching) ->
             case CompileFun(SrcFile, [binary, return|Options]) of
                 {ok, Module, Binary, Warnings} ->
                     reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings);
+
+                {ok, [{ok, Module, Binary, Warnings}], Warnings2} ->
+                    reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings ++ Warnings2);
 
                 {ok, multiple, Results, Warnings} ->
                     Reloader = fun({CompiledModule, Binary}) ->
