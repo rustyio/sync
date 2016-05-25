@@ -507,17 +507,12 @@ reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, W
     %% Try to load the module...
     case code:ensure_loaded(Module) of
         {module, Module} -> ok;
-        {error, nofile} ->
-            Msg =
-                [
-                    io_lib:format(
-                        "~p:0: Couldn't load module: nofile~n", [Module])
-                ],
-            sync_notify:log_warnings(Msg);
+        {error, nofile} -> error_no_file(Module);
         {error, embedded} ->
             %% Module is not yet loaded, load it.
             case code:load_file(Module) of
-                {module, Module} -> ok
+                {module, Module} -> ok;
+                {error, nofile} -> error_no_file(Module)
             end
     end,
     gen_server:cast(?SERVER, compare_beams),
@@ -525,6 +520,10 @@ reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, W
     %% Print the warnings...
     print_results(Module, SrcFile, [], Warnings),
     {ok, [], Warnings}.
+
+error_no_file(Module) ->
+    Msg = io_lib:format("~p:0: Couldn't load module: nofile~n", [Module]),
+    sync_notify:log_warnings([Msg]).
 
 recompile_src_file(SrcFile, _EnablePatching) ->
     %% Get the module, src dir, and options...
