@@ -114,6 +114,29 @@ For example
 ].
 ```
 
+## Exclude folders from sync
+
+```erlang
+[
+    {sync, [
+        {exclude_masks, ["deps", "_rel"]}
+    ]}
+].
+```
+This will exclude any path containing "deps" or "_rel" from being synced.
+
+## Include only specified folders to sync
+
+```erlang
+[
+    {sync, [
+        {include_masks, ["src"]}
+    ]}
+].
+```
+This will include to sync only paths containing word "src".
+
+
 ## Console Logging
 
 By default, sync will print sucess / warning / failure notifications to the
