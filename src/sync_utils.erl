@@ -9,7 +9,6 @@
          get_env/2,
          set_env/2,
          file_last_modified_time/1,
-         transform_options/2,
          get_system_modules/0
 ]).
 
@@ -261,25 +260,6 @@ file_last_modified_time(File) ->
     catch _Error : _Reason ->
         deleted
     end.
-
-%% @private Walk through each option. If it's an include or outdir option, then
-%% rewrite the path...
-transform_options(SrcDir, Options) ->
-    F = fun(Option, Acc) ->
-        case Option of
-            {i, IncludeDir1} ->
-                IncludeDir2 = filename:join([SrcDir, "..", IncludeDir1]),
-                [{i, IncludeDir2}|Acc];
-            {outdir, _Dir} ->
-                Acc;
-            Other ->
-                [Other|Acc]
-        end
-    end,
-
-    LastPart = filename:basename(proplists:get_value(outdir, Options, "./ebin")),
-    BinDir = filename:join([SrcDir, "..", LastPart]),
-    lists:foldl(F, [], Options) ++ [{outdir, BinDir}].
 
 %% @private Return a list of all modules that belong to Erlang rather
 %% than whatever application we may be running.
