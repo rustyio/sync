@@ -330,7 +330,7 @@ process_beam_lastmod([{Module1, LastMod1}|T1], [{Module2, LastMod2}|T2], EnableP
         false ->
             process_beam_lastmod([{Module1, LastMod1}|T1], T2, EnablePatching, Acc)
     end;
-process_beam_lastmod([], [], EnablePatching, Acc) ->
+process_beam_lastmod(A, B, EnablePatching, Acc) when A =:= []; B =:= [] ->
     MsgAdd = case EnablePatching of
                  true -> " on " ++ integer_to_list(length(get_nodes())) ++ " nodes.";
                  false -> "."
