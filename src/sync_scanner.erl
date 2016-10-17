@@ -421,8 +421,8 @@ process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], EnableP
 process_src_file_lastmod([], [{File, LastMod}|T2], EnablePatching) ->
     maybe_recompile_src_file(File, LastMod, EnablePatching),
     process_src_file_lastmod([], T2, EnablePatching);
-process_src_file_lastmod([], [], _) ->
-    %% Done.
+process_src_file_lastmod(_A, [], _) ->
+    %% All remaining files, if any, were removed.
     ok;
 process_src_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing.
@@ -639,13 +639,7 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
     case File1 < File2 of
         true ->
             %% File was removed, do nothing...
-            WhoInclude = who_include(File1, SrcFiles),
-            case WhoInclude of
-                [] -> ok;
-                _ -> io:format(
-                        "Warning. Deleted ~p file included in existing src files: ~p",
-                        [filename:basename(File1), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
-            end,
+            warn_deleted_hrl_files(File1, SrcFiles),
             process_hrl_file_lastmod(T1, [{File2, LastMod2}|T2], SrcFiles, Patching);
         false ->
             %% File is new, look for src that include it
@@ -658,12 +652,25 @@ process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFiles, Patching) ->
     WhoInclude = who_include(File, SrcFiles),
     [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
     process_hrl_file_lastmod([], T2, SrcFiles, Patching);
+process_hrl_file_lastmod([{File1, _LastMod1}|T1], [], SrcFiles, Patching) ->
+    %% Rest of file(s) removed, warn and process next
+    warn_deleted_hrl_files(File1, SrcFiles),
+    process_hrl_file_lastmod(T1, [], SrcFiles, Patching);
 process_hrl_file_lastmod([], [], _, _) ->
     %% Done
     ok;
 process_hrl_file_lastmod(undefined, _Other, _,  _) ->
     %% First load, do nothing
     ok.
+
+warn_deleted_hrl_files(HrlFile, SrcFiles) ->
+    WhoInclude = who_include(HrlFile, SrcFiles),
+    case WhoInclude of
+        [] -> ok;
+        _ -> io:format(
+                "Warning. Deleted ~p file included in existing src files: ~p~n",
+                [filename:basename(HrlFile), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
+    end.
 
 who_include(HrlFile, SrcFiles) ->
     HrlFileBaseName = filename:basename(HrlFile),
