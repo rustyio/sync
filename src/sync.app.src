@@ -5,6 +5,9 @@
     {vsn, "0.1.3"},
     {registered, []},
     {mod, { sync, []}},
+    {maintainers, ["Jesse Gumm", "Heinz N. Gies"]},
+    {licenses, ["MIT"]},
+    {links, [{"Github", "https://github.com/rustyio/sync"}]},
     {env, [
         {discover_modules_interval, 30000},
         {discover_src_dirs_interval, 30000},
