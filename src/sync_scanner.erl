@@ -176,13 +176,22 @@ handle_cast(discover_src_files, State) ->
     {noreply, NewState};
 
 handle_cast(compare_beams, State) ->
-    %% Create a list of beam file lastmod times...
+    %% Create a list of beam file lastmod times, but filter out modules not having 
+    %% a valid beam file reference.
     F = fun(X) ->
-        Beam = code:which(X),
-        LastMod = filelib:last_modified(Beam),
-        {X, LastMod}
+        case code:which(X) of
+            Beam when is_list(Beam) ->
+                case filelib:last_modified(Beam) of
+                    0 ->
+                        false; %% file not found
+                    LastMod ->
+                        {true, {X, LastMod}}
+                end;
+            _Other ->
+                false %% non_existing | cover_compiled | preloaded
+        end
     end,
-    NewBeamLastMod = lists:usort([F(X) || X <- State#state.modules]),
+    NewBeamLastMod = lists:usort(lists:filtermap(F, State#state.modules)),
 
     %% Compare to previous results, if there are changes, then reload
     %% the beam...
