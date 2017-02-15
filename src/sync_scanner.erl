@@ -657,9 +657,10 @@ process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFile
             process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
     end;
 process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFiles, Patching) ->
+    %% FIXME!!! It's incredible, un-usable slow 
     %% File is new, look for src that include it
-    WhoInclude = who_include(File, SrcFiles),
-    [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
+    %% WhoInclude = who_include(File, SrcFiles),
+    %% [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
     process_hrl_file_lastmod([], T2, SrcFiles, Patching);
 process_hrl_file_lastmod([{File1, _LastMod1}|T1], [], SrcFiles, Patching) ->
     %% Rest of file(s) removed, warn and process next
@@ -751,9 +752,25 @@ module_matches(Module, [Pattern|T]) when is_list(Pattern) ->
         nomatch -> module_matches(Module, T)
     end.
 
+none_of(Dir, Masks) ->
+    lists:all(fun(Mask) -> string:str(Dir, Mask) == 0 end, Masks).
+
+any_of(Dir, Masks) ->
+    lists:any(fun(Mask) -> string:str(Dir, Mask) > 0 end, Masks).
+
+exclude_dirs(Dirs, []) -> Dirs;
+exclude_dirs(Dirs, Masks) -> [ Dir || Dir <- Dirs, none_of(Dir, Masks) ].
+
+include_dirs(Dirs, []) -> Dirs;
+include_dirs(Dirs, Masks) -> [ Dir || Dir <- Dirs, any_of(Dir, Masks) ].
+
+filter_dirs(Dirs, IncludeMasks, ExcludeMasks) ->
+    include_dirs(exclude_dirs(Dirs, ExcludeMasks), IncludeMasks).
 
 discover_source_dirs(State, ExtraDirs) ->
     %% Extract the compile / options / source / dir from each module.
+    ExcludeMasks = application:get_env(sync, exclude_masks, []),
+    IncludeMasks = application:get_env(sync, include_masks, []),
     F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
         %% Get the dir...
         case sync_utils:get_src_dir_from_module(X) of
@@ -770,8 +787,8 @@ discover_source_dirs(State, ExtraDirs) ->
         end
     end,
     {SrcDirs, HrlDirs} = lists:foldl(F, {ExtraDirs, []}, State#state.modules),
-    USortedSrcDirs = lists:usort(SrcDirs),
-    USortedHrlDirs = lists:usort(HrlDirs),
+    USortedSrcDirs = filter_dirs(lists:usort(SrcDirs), IncludeMasks, ExcludeMasks),
+    USortedHrlDirs = filter_dirs(lists:usort(HrlDirs), IncludeMasks, ExcludeMasks),
     %% InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...

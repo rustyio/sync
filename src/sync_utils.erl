@@ -9,11 +9,8 @@
          get_env/2,
          set_env/2,
          file_last_modified_time/1,
-         transform_options/2,
          get_system_modules/0
 ]).
-
--compile(export_all).
 
 get_src_dir_from_module(Module)->
     case code:is_loaded(Module) of
@@ -68,19 +65,13 @@ get_options_from_module(Module) ->
         {file, _} ->
             try
                 Props = Module:module_info(compile),
-                Options1 = proplists:get_value(options, Props, []),
-                %% transform `outdir'
-                BeamDir = filename:dirname(code:which(Module)),
-                Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
-                %% transform `i' (Include Directory)
-                IncludeDir1 = proplists:get_value(i, Options2, "include"),
-                {ok, SrcDir} = get_src_dir_from_module(Module),
-                {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
-                %% check if the module is a DTL template.
-                Type = get_filetype(Module),
-
-                Options3 = [{i, IncludeDir2}, {type, Type} | proplists:delete(i, Options2)],
-                {ok, Options3}
+                ModuleOptions = proplists:get_value(options, Props),
+                Opts = 
+                    lists:foldl(
+                        fun(Opt, Acc) ->
+                            [ transform_option(Module, Opt) | Acc ]
+                    end,  default_options(Module, ModuleOptions), ModuleOptions),
+                {ok, Opts}
             catch ExType:Error ->
                 Msg =
                     [
@@ -94,6 +85,23 @@ get_options_from_module(Module) ->
         _ ->
             {ok, []}
     end.
+
+default_options(Module, Props) ->
+    Include = 
+        case proplists:get_all_values(i, Props) of
+            [] -> [{i, "include"}];
+            _ -> []
+        end,
+    [{type, get_filetype(Module)} | Include].
+
+transform_option(Module, {outdir, _Outdir}) ->
+    {outdir, filename:dirname(code:which(Module))};
+transform_option(Module, {i, Include}) ->
+    case filelib:is_dir(Include) of
+        true -> {i, Include};
+        false -> guess_include_dir(Module, Include)
+    end;
+transform_option(_, Opt) -> Opt.
 
 %% @private This will check if the given module or source file is an ErlyDTL template.
 %% Currently, this is done by checking if its reported source path ends with
@@ -114,6 +122,12 @@ get_filetype(Source) when is_list(Source) ->
         ".lfe" -> lfe;
         ".ex" -> elixir
     end.
+
+guess_include_dir(Module, Include) ->
+    BeamDir = filename:dirname(code:which(Module)),
+    {ok, SrcDir} = get_src_dir_from_module(Module),
+    {ok, IncludeDir} = determine_include_dir(Include, BeamDir, SrcDir),
+    {i, IncludeDir}.
 
 %% @private This will search back to find an appropriate include directory, by
 %% searching further back than "..". Instead, it will extract the basename
@@ -246,25 +260,6 @@ file_last_modified_time(File) ->
     catch _Error : _Reason ->
         deleted
     end.
-
-%% @private Walk through each option. If it's an include or outdir option, then
-%% rewrite the path...
-transform_options(SrcDir, Options) ->
-    F = fun(Option, Acc) ->
-        case Option of
-            {i, IncludeDir1} ->
-                IncludeDir2 = filename:join([SrcDir, "..", IncludeDir1]),
-                [{i, IncludeDir2}|Acc];
-            {outdir, _Dir} ->
-                Acc;
-            Other ->
-                [Other|Acc]
-        end
-    end,
-
-    LastPart = filename:basename(proplists:get_value(outdir, Options, "./ebin")),
-    BinDir = filename:join([SrcDir, "..", LastPart]),
-    lists:foldl(F, [], Options) ++ [{outdir, BinDir}].
 
 %% @private Return a list of all modules that belong to Erlang rather
 %% than whatever application we may be running.
