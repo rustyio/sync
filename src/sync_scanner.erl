@@ -439,12 +439,10 @@ process_src_file_lastmod(undefined, _Other, _) ->
 
 
 erlydtl_compile(SrcFile, Options) ->
-    DtlOptions =
-        case lists:keytake(outdir, 1, Options) of
-            false -> Options;
-            {value, {outdir, OutDir}, OtherOptions} ->
-                [{out_dir, OutDir} | OtherOptions]
+    F = fun({outdir, OutDir}, Acc) -> [{out_dir, OutDir} | Acc];
+           (OtherOption, Acc) -> [OtherOption | Acc]
         end,
+    DtlOptions = lists:foldl(F, [], Options),
     Module =
         list_to_atom(
             lists:flatten(filename:basename(SrcFile, ".dtl") ++ "_dtl")),
