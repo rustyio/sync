@@ -73,14 +73,21 @@ get_options_from_module(Module) ->
                 BeamDir = filename:dirname(code:which(Module)),
                 Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
                 %% transform `i' (Include Directory)
-                IncludeDir1 = proplists:get_value(i, Options2, "include"),
-                {ok, SrcDir} = get_src_dir_from_module(Module),
-                {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
+                Fun = fun({i, IncludeDir1}, {IncludeDirList, TmpOptions}) ->
+%%                    IncludeDir1 = proplists:get_value(i, Options2, "include"),
+                        {ok, SrcDir} = get_src_dir_from_module(Module),
+                        {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
+                        {[IncludeDir2 | IncludeDirList], proplists:delete(i, TmpOptions)};
+                    (_, {IncludeDirList, TmpOptions}) ->
+                        {IncludeDirList, TmpOptions}
+                end,
+                {IncludeDirList1, _Options3} = lists:foldl(Fun, {[], Options2}, Options2),
+
                 %% check if the module is a DTL template.
                 Type = get_filetype(Module),
 
-                Options3 = [{i, IncludeDir2}, {type, Type} | proplists:delete(i, Options2)],
-                {ok, Options3}
+                Options4 = [{i_list, IncludeDirList1}, {type, Type} | Options2],
+                {ok, Options4}
             catch ExType:Error ->
                 Msg =
                     [
