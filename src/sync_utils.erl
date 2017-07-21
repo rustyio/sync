@@ -73,15 +73,14 @@ get_options_from_module(Module) ->
                 BeamDir = filename:dirname(code:which(Module)),
                 Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
                 %% transform `i' (Include Directory)
-                Fun = fun({i, IncludeDir1}, {IncludeDirList, TmpOptions}) ->
-%%                    IncludeDir1 = proplists:get_value(i, Options2, "include"),
+                Fun = fun({i, IncludeDir1}, IncludeDirList) ->
                         {ok, SrcDir} = get_src_dir_from_module(Module),
                         {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
-                        {[IncludeDir2 | IncludeDirList], proplists:delete(i, TmpOptions)};
-                    (_, {IncludeDirList, TmpOptions}) ->
-                        {IncludeDirList, TmpOptions}
+                        [IncludeDir2 | IncludeDirList];
+                    (_, IncludeDirList) ->
+                        IncludeDirList
                 end,
-                {IncludeDirList1, _Options3} = lists:foldl(Fun, {[], Options2}, Options2),
+                IncludeDirList1 = lists:foldl(Fun, {[], Options2}, Options2),
 
                 %% check if the module is a DTL template.
                 Type = get_filetype(Module),
