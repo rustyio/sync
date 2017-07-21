@@ -80,7 +80,7 @@ get_options_from_module(Module) ->
                     (_, IncludeDirList) ->
                         IncludeDirList
                 end,
-                IncludeDirList1 = lists:foldl(Fun, {[], Options2}, Options2),
+                IncludeDirList1 = lists:foldl(Fun, [], Options2),
 
                 %% check if the module is a DTL template.
                 Type = get_filetype(Module),
