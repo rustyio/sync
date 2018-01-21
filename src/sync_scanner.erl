@@ -148,11 +148,11 @@ handle_cast(discover_modules, State) ->
 handle_cast(discover_src_dirs, State) ->
     case application:get_env(sync, src_dirs) of
         undefined ->
-            discover_source_dirs(State, []);
+            discover_source_dirs(State, [], []);
         {ok, {add, DirsAndOpts}} ->
-            discover_source_dirs(State, dirs(DirsAndOpts));
+            discover_source_dirs(State, dirs(DirsAndOpts), []);
         {ok, {replace, DirsAndOpts}} ->
-            {noreply, State#state{src_dirs = dirs(DirsAndOpts), hrl_dirs = []}}
+            discover_source_dirs(State, [], dirs(DirsAndOpts))
     end;
 
 handle_cast(discover_src_files, State) ->
@@ -254,7 +254,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 dirs(DirsAndOpts) ->
-    [begin 
+    [begin
          sync_options:set_options(Dir, Opts),
          
          %% ensure module out path exists & in our code list
@@ -750,23 +750,29 @@ module_matches(Module, [Pattern|T]) when is_list(Pattern) ->
     end.
 
 
-discover_source_dirs(State, ExtraDirs) ->
+discover_source_dirs(State, ExtraDirs, ReplaceDirs) ->
     %% Extract the compile / options / source / dir from each module.
-    F = fun(X, Acc = {SrcAcc, HrlAcc}) ->
-        %% Get the dir...
-        case sync_utils:get_src_dir_from_module(X) of
-            {ok, SrcDir} ->
-                %% Get the options, store under the dir...
-                {ok, Options} = sync_utils:get_options_from_module(X),
-                %% Store the options for later reference...
-                HrlDir = proplists:get_value(i_list, Options, []),
-                Options1 = proplists:delete(i_list, Options),
-                sync_options:set_options(SrcDir, Options1),
-                %% Return the dir...
-                {[SrcDir|SrcAcc], HrlDir ++ HrlAcc};
-            undefined ->
-                Acc
-        end
+    F = fun
+        (X, Acc = {SrcAcc, HrlAcc}) ->
+            %% Get the dir...
+            case sync_utils:get_src_dir_from_module(X) of
+                {ok, SrcDir} ->
+                    case is_replace_dir(SrcDir, ReplaceDirs) of
+                        true ->
+                            %% Get the options, store under the dir...
+                            {ok, Options} = sync_utils:get_options_from_module(X),
+                            %% Store the options for later reference...
+                            HrlDir = proplists:get_value(i_list, Options, []),
+                            Options1 = proplists:delete(i_list, Options),
+                            sync_options:set_options(SrcDir, Options1),
+                            %% Return the dir...
+                            {[SrcDir|SrcAcc], HrlDir ++ HrlAcc};
+                        _ ->
+                            Acc
+                    end;
+                undefined ->
+                    Acc
+            end
     end,
     {SrcDirs, HrlDirs} = lists:foldl(F, {ExtraDirs, []}, State#state.modules),
     USortedSrcDirs = lists:usort(SrcDirs),
@@ -779,3 +785,12 @@ discover_source_dirs(State, ExtraDirs) ->
     %% Return with updated dirs...
     NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
     {noreply, NewState}.
+
+is_replace_dir(_, []) ->
+    true;
+is_replace_dir(SrcDir, ReplaceDirs) ->
+    lists:foldl(fun
+        (Dir, false) ->
+            case re:run(SrcDir, Dir) of nomatch -> false; _ -> true end;
+        (_, Acc) -> Acc
+    end, false, ReplaceDirs).
