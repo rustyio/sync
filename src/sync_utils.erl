@@ -13,6 +13,14 @@
          get_system_modules/0
 ]).
 
+-ifdef(OTP_RELEASE). %% this implies 21 or higher
+-define(EXCEPTION(Class, Reason, Stacktrace), Class:Reason:Stacktrace).
+-define(GET_STACK(Stacktrace), Stacktrace).
+-else.
+-define(EXCEPTION(Class, Reason, _), Class:Reason).
+-define(GET_STACK(_), erlang:get_stacktrace()).
+-endif.
+
 -compile([export_all, nowarn_export_all]).
 
 get_src_dir_from_module(Module)->
@@ -88,12 +96,12 @@ get_options_from_module(Module) ->
 
                 Options4 = [{i_list, IncludeDirList1}, {type, Type} | Options2],
                 {ok, Options4}
-            catch ExType:Error ->
+            catch ?EXCEPTION(ExType, Error, Stacktrace) ->
                 Msg =
                     [
                         io_lib:format(
                             "~p:0: ~p looking for options: ~p. Stack: ~p~n",
-                            [Module, ExType, Error, erlang:get_stacktrace()])
+                            [Module, ExType, Error, ?GET_STACK(Stacktrace)])
                     ],
                 sync_notify:log_warnings(Msg),
                 {ok, []}
