@@ -2,7 +2,7 @@
 
 -module(sync_scanner).
 -behaviour(gen_server).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 %% API
 -export([
