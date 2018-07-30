@@ -28,10 +28,9 @@ ERLANG_VERSION = $(shell $(ERLANG_VERSION_CHECK))
 # This is primarily for Travis build testing, as each build instruction will overwrite the previous
 travis: $(ERLANG_VERSION)
 
-R15B: dialyzer
-R15B01: dialyzer
-R15B02: dialyzer-no-race
-R15B03: dialyzer
-R16B: dialyzer
-R16B01: dialyzer
-R16B02: dialyzer
+R16B03: dialyzer
+17: dialyzer
+18: dialyzer
+19: dialyzer
+20: dialyzer
+21: dialyzer
