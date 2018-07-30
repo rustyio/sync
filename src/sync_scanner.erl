@@ -41,7 +41,7 @@
     src_files = [] :: [file:filename()],
     hrl_dirs = [] :: [file:filename()],
     hrl_files = [] :: [file:filename()],
-    beam_lastmod = undefined :: [{module(), timestamp()}],
+    beam_lastmod = undefined :: [{module(), timestamp()}] | undefined,
     src_file_lastmod = [] :: [{file:filename(), timestamp()}],
     hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
     timers = [],
