@@ -108,6 +108,14 @@ enable_patching() ->
     gen_server:cast(?SERVER, enable_patching),
     ok.
 
+get_env_value(Key, DefaultValue) ->
+    case application:get_env(sync, Key) of
+        undefined ->
+            DefaultValue;
+        {ok, Value} ->
+            Value
+    end.
+
 init([]) ->
     %% Trap exits to catch failing processes...
     erlang:process_flag(trap_exit, true),
@@ -139,7 +147,8 @@ handle_cast(discover_modules, State) ->
     FilteredModules = filter_modules_to_scan(Modules),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_modules, 30000, State#state.timers),
+    Interval = get_env_value(discover_modules_interval, 30000),
+    NewTimers = schedule_cast(discover_modules, Interval, State#state.timers),
 
     %% Return with updated modules...
     NewState = State#state { modules=FilteredModules, timers=NewTimers },
@@ -169,7 +178,8 @@ handle_cast(discover_src_files, State) ->
     HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_files, 5000, State#state.timers),
+    Interval = get_env_value(discover_src_files_interval, 5000),
+    NewTimers = schedule_cast(discover_src_files, Interval, State#state.timers),
 
     %% Return with updated files...
     NewState = State#state { src_files=ErlFiles, hrl_files=HrlFiles, timers=NewTimers },
@@ -198,7 +208,8 @@ handle_cast(compare_beams, State) ->
     process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod, State#state.patching),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_beams, 2000, State#state.timers),
+    Interval = get_env_value(compare_beams_interval, 2000),
+    NewTimers = schedule_cast(compare_beams, Interval, State#state.timers),
 
     %% Return with updated beam lastmod...
     NewState = State#state { beam_lastmod=NewBeamLastMod, timers=NewTimers },
@@ -216,7 +227,8 @@ handle_cast(compare_src_files, State) ->
     process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod, State#state.patching),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_src_files, 1000, State#state.timers),
+    Interval = get_env_value(compare_src_files_interval, 1000),
+    NewTimers = schedule_cast(compare_src_files, Interval, State#state.timers),
 
     %% Return with updated src_file lastmod...
     NewState = State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers },
@@ -234,7 +246,8 @@ handle_cast(compare_hrl_files, State) ->
     process_hrl_file_lastmod(State#state.hrl_file_lastmod, NewHrlFileLastMod, State#state.src_files, State#state.patching),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_hrl_files, 2000, State#state.timers),
+    Interval = get_env_value(compare_hrl_files_interval,, 2000),
+    NewTimers = schedule_cast(compare_hrl_files, Interval, State#state.timers),
 
     %% Return with updated hrl_file lastmod...
     NewState = State#state { hrl_file_lastmod=NewHrlFileLastMod, timers=NewTimers },
@@ -774,7 +787,8 @@ discover_source_dirs(State, ExtraDirs) ->
     %% InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
+    Interval = get_env_value(discover_src_dirs_interval, 3000),
+    NewTimers = schedule_cast(discover_src_dirs, Interval, State#state.timers),
 
     %% Return with updated dirs...
     NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
