@@ -2,7 +2,7 @@
 
 -module(sync_scanner).
 -behaviour(gen_server).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 %% API
 -export([
@@ -41,7 +41,7 @@
     src_files = [] :: [file:filename()],
     hrl_dirs = [] :: [file:filename()],
     hrl_files = [] :: [file:filename()],
-    beam_lastmod = undefined :: [{module(), timestamp()}],
+    beam_lastmod = undefined :: [{module(), timestamp()}] | undefined,
     src_file_lastmod = [] :: [{file:filename(), timestamp()}],
     hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
     timers = [],
