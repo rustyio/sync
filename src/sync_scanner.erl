@@ -89,7 +89,7 @@ set_growl(F) when ?LOG_OR_GROWL_OFF(F) ->
     ok.
 
 get_growl() ->
-    sync_utils:get_env(growl, all).
+    sync_utils:get_env(growl, none).
 
 set_log(T) when ?LOG_OR_GROWL_ON(T) ->
     sync_utils:set_env(log, T),
