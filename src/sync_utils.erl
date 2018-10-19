@@ -75,30 +75,27 @@ get_options_from_module(Module) ->
     case code:is_loaded(Module) of
         {file, _} ->
             try
+
                 Props = Module:module_info(compile),
-                Options1 = proplists:get_value(options, Props, []),
-                %% transform `outdir'
                 BeamDir = filename:dirname(code:which(Module)),
-                BaseIList = proplists:get_value(i_list, Options1, []),
 
-                Options2 = [{outdir, BeamDir} | proplists:delete(outdir, Options1)],
-                Options3 = proplists:delete(i_list, Options2),
+                Options1 = proplists:get_value(options, Props, []),
 
-                %% transform `i' (Include Directory)
-                Fun = fun({i, IncludeDir1}, IncludeDirList) ->
-                        {ok, SrcDir} = get_src_dir_from_module(Module),
-                        {ok, IncludeDir2} = determine_include_dir(IncludeDir1, BeamDir, SrcDir),
-                        [IncludeDir2 | IncludeDirList];
-                    (_, IncludeDirList) ->
-                        IncludeDirList
-                end,
-                IncludeDirList1 = lists:foldl(Fun, BaseIList, Options3),
+                %% transform `outdir'
+                Options2 = transform_outdir(BeamDir, Options1),
 
-                %% check if the module is a DTL template.
-                Type = get_filetype(Module),
+                Options3 = ensure_has_include(Options2),
 
-                Options4 = [{i_list, IncludeDirList1}, {type, Type} | Options3],
-                {ok, Options4}
+                %% transform the include directories
+                Options4 = transform_all_includes(Module, BeamDir, Options3),
+
+                %% maybe_add_compile_info
+                Options5 = maybe_add_compile_info(Options4),
+
+                %% add filetype to options (DTL, LFE, erl, etc)
+                Options6 = add_filetype(Module, Options5),
+
+                {ok, Options6}
             catch ?EXCEPTION(ExType, Error, Stacktrace) ->
                 Msg =
                     [
@@ -112,6 +109,39 @@ get_options_from_module(Module) ->
         _ ->
             {ok, []}
     end.
+
+transform_outdir(BeamDir, Options) ->
+    [{outdir, BeamDir} | proplists:delete(outdir, Options)].
+
+ensure_has_include(Options) ->
+    case proplists:get_value(i, Options) of
+        undefined -> [{i, "include"} | Options];
+        _ -> Options
+    end.
+
+transform_all_includes(Module, BeamDir, Options) ->
+    [transform_include(Module, BeamDir, Opt) || Opt <- Options].
+
+transform_include(Module, BeamDir, {i, IncludeDir}) ->
+    {ok, SrcDir} = get_src_dir_from_module(Module),
+    {ok, IncludeDir2} = determine_include_dir(IncludeDir, BeamDir, SrcDir),
+    {i, IncludeDir2};
+transform_include(_, _, Other) ->
+    Other.
+
+maybe_add_compile_info(Options) ->
+    case lists:member(predetermined, Options) of
+        true -> Options;
+        false -> add_compile_info(Options)
+    end.
+
+add_compile_info(Options) ->
+    CompInfo = [{K,V} || {K,V} <- Options, lists:member(K, [outdir, i])],
+    [{compile_info, CompInfo} | Options].
+
+add_filetype(Module, Options) ->
+    Type = get_filetype(Module),
+    [{type, Type} | Options].
 
 %% @private This will check if the given module or source file is an ErlyDTL template.
 %% Currently, this is done by checking if its reported source path ends with

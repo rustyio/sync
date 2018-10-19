@@ -542,7 +542,6 @@ recompile_src_file(SrcFile, _EnablePatching) ->
 
     case sync_options:get_options(SrcDir) of
         {ok, Options} ->
-            error_logger:info_msg("Options: ~p",[Options]),
             case CompileFun(SrcFile, [binary, return|Options]) of
                 {ok, Module, Binary, Warnings} ->
                     reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings);
@@ -763,10 +762,9 @@ discover_source_dirs(State, ExtraDirs, ReplaceDirs) ->
                             %% Get the options, store under the dir...
                             {ok, Options} = sync_utils:get_options_from_module(X),
                             %% Store the options for later reference...
-                            HrlDir = proplists:get_value(i_list, Options, []),
-                            Options1 = proplists:delete(i_list, Options),
-                            Options2 = [{i, H} || H <- HrlDir] ++ Options1,
-                            sync_options:set_options(SrcDir, Options2),
+                            HrlDir = proplists:get_all_values(i, Options),
+
+                            sync_options:set_options(SrcDir, Options),
                             %% Return the dir...
                             {[SrcDir|SrcAcc], HrlDir ++ HrlAcc};
                         _ ->

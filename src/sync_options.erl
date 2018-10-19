@@ -46,12 +46,9 @@ get_options([]) ->
 get_options(SrcDir) ->
     case gen_server:call(?SERVER, {get_options, SrcDir}) of
         {ok, Options} -> 
-            error_logger:info_msg("Got options from Server: ~p",[Options]),
             {ok, Options};
         undefined ->
-            Opts = get_options(filename:dirname(SrcDir)),
-            error_logger:info_msg("Loaded Options directly: ~p",[Opts]),
-            Opts
+            get_options(filename:dirname(SrcDir))
     end.
 
 set_options(SrcDir, Options) ->
