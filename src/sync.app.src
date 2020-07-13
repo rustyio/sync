@@ -8,6 +8,11 @@
     {maintainers, ["Jesse Gumm", "Heinz N. Gies"]},
     {licenses, ["MIT"]},
     {links, [{"Github", "https://github.com/rustyio/sync"}]},
+    {applications, [
+        kernel,
+        stdlib,
+        fs
+    ]},
     {env, [
         {discover_modules_interval,  10000},
         {discover_src_dirs_interval, 10000},

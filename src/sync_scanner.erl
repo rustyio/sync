@@ -2,6 +2,8 @@
 
 -module(sync_scanner).
 -behaviour(gen_server).
+-include_lib("kernel/include/file.hrl").
+
 -compile([export_all, nowarn_export_all]).
 
 %% API
@@ -46,21 +48,31 @@
     hrl_file_lastmod = [] :: [{file:filename(), timestamp()}],
     timers = [],
     patching = false,
-    paused = false
+    paused = false,
+    sync_method = scanner,
+    modified_files = [] :: [file:filename()],
+    fsevents_pids = []
 }).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+
 rescan() ->
-    io:format("Scanning source files...~n"),
     gen_server:cast(?SERVER, discover_modules),
     gen_server:cast(?SERVER, discover_src_dirs),
     gen_server:cast(?SERVER, discover_src_files),
-    gen_server:cast(?SERVER, compare_src_files),
-    gen_server:cast(?SERVER, compare_beams),
-    gen_server:cast(?SERVER, compare_hrl_files),
-    ok.
+    case sync_utils:get_env(sync_method, scanner) of
+        scanner ->
+            io:format("Scanning source files...~n"),
+            gen_server:cast(?SERVER, compare_src_files),
+            gen_server:cast(?SERVER, compare_beams),
+            gen_server:cast(?SERVER, compare_hrl_files),
+            ok;
+        _ ->
+            io:format("Listening on fsevents...~n"),
+            ok
+    end.
 
 unpause() ->
     gen_server:cast(?SERVER, unpause),
@@ -118,7 +130,9 @@ init([]) ->
     %% Display startup message...
     sync_notify:startup(get_growl()),
 
-    {ok, #state{}}.
+    {ok, #state{
+        sync_method = sync_utils:get_env(sync_method, scanner)
+    }}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -139,7 +153,10 @@ handle_cast(discover_modules, State) ->
     FilteredModules = filter_modules_to_scan(Modules),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_modules, 30000, State#state.timers),
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(discover_modules, 30000, State#state.timers);
+        _ -> proplists:delete(discover_modules, State#state.timers)
+    end,
 
     %% Return with updated modules...
     NewState = State#state { modules=FilteredModules, timers=NewTimers },
@@ -169,7 +186,10 @@ handle_cast(discover_src_files, State) ->
     HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_files, 5000, State#state.timers),
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(discover_src_files, 5000, State#state.timers);
+        _ -> proplists:delete(discover_src_files, State#state.timers)
+    end,
 
     %% Return with updated files...
     NewState = State#state { src_files=ErlFiles, hrl_files=HrlFiles, timers=NewTimers },
@@ -198,7 +218,10 @@ handle_cast(compare_beams, State) ->
     process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod, State#state.patching),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_beams, 2000, State#state.timers),
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(compare_beams, 2000, State#state.timers);
+        _ -> proplists:delete(compare_beams, State#state.timers)
+    end,
 
     %% Return with updated beam lastmod...
     NewState = State#state { beam_lastmod=NewBeamLastMod, timers=NewTimers },
@@ -240,6 +263,44 @@ handle_cast(compare_hrl_files, State) ->
     NewState = State#state { hrl_file_lastmod=NewHrlFileLastMod, timers=NewTimers },
     {noreply, NewState};
 
+handle_cast(fsevents_modified_files,
+        #state{
+            modified_files = Files, patching = Patching, src_files = SrcFiles, modules = OldModules
+        } = State) when Files /= [] ->
+    Recompile = fun(F, P) ->
+        recompile_src_file(F, P),
+        {_, M} = determine_compile_fun_and_module_name(F),
+        M
+    end,
+
+    NewModules1 = lists:foldl(fun
+        (FileName, Acc) ->
+            case filename:extension(FileName) of
+                Ext when Ext == ".erl"; Ext == ".dtl"; Ext == ".lfe"; Ext == ".ex" ->
+                    M = Recompile(FileName, Patching),
+                    [M | Acc];
+                ".hrl" ->
+                    WhoInclude = who_include(FileName, SrcFiles),
+                    [Recompile(SrcFile, Patching) || SrcFile <- WhoInclude] ++ Acc;
+                _ ->
+                    Acc
+            end
+    end, [], Files),
+
+    %% It's possible that this module is not known to sync, if yes, add it to modules list
+    Filter = fun(M) ->
+        lists:member(M, OldModules) /= true
+    end,
+    NewModules = case lists:filter(Filter, NewModules1) of
+        [] -> OldModules;
+        R -> lists:usort(OldModules ++ R)
+    end,
+
+    {noreply, State#state{
+        modified_files = [],
+        modules = NewModules
+    }};
+
 handle_cast(info, State) ->
     io:format("Modules: ~p~n", [State#state.modules]),
     io:format("Source Dirs: ~p~n", [State#state.src_dirs]),
@@ -256,7 +317,7 @@ handle_cast(_Msg, State) ->
 dirs(DirsAndOpts) ->
     [begin
          sync_options:set_options(Dir, Opts),
-         
+
          %% ensure module out path exists & in our code list
          case proplists:get_value(outdir, Opts) of
              undefined ->
@@ -267,6 +328,16 @@ dirs(DirsAndOpts) ->
          end,
          Dir 
      end || {Dir, Opts} <- DirsAndOpts].
+
+handle_info({_Pid, {fs,file_event}, {FileName, _Events}},
+        #state{modified_files = OldModFiles} = State) ->
+
+    %% Process the modified files event about a second later. Just
+    %% to thaw all events happening on a file
+    {noreply, State#state{
+        modified_files = lists:usort([FileName | OldModFiles]),
+        timers = schedule_cast(fsevents_modified_files, 1000, State#state.timers)
+    }};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -519,7 +590,8 @@ reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, W
             %% Module is not yet loaded, load it.
             case code:load_file(Module) of
                 {module, Module} -> ok;
-                {error, nofile} -> error_no_file(Module)
+                {error, nofile} ->
+                    error_no_file(Module)
             end
     end,
     gen_server:cast(?SERVER, compare_beams),
@@ -780,11 +852,72 @@ discover_source_dirs(State, ExtraDirs, ReplaceDirs) ->
     %% InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...
-    NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
+    case State#state.sync_method of
+        scanner ->
+            NewTimers = schedule_cast(discover_src_dirs, 30000, State#state.timers),
 
-    %% Return with updated dirs...
-    NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
-    {noreply, NewState}.
+            %% Return with updated dirs...
+            NewState = State#state { src_dirs=USortedSrcDirs, hrl_dirs=USortedHrlDirs, timers=NewTimers },
+            {noreply, NewState};
+        fsevents ->
+            %% Stop old processes
+            start_fsevents(SrcDirs++HrlDirs, ReplaceDirs, State#state{
+                src_dirs = USortedSrcDirs,
+                hrl_dirs = USortedHrlDirs
+            })
+    end.
+
+start_fsevents(MonitorDirs, ReplaceDirs, State) ->
+    %% Stop existing fs processes if any
+    [erlang:exit(Pid, normal) || Pid <- State#state.fsevents_pids],
+
+    %% Start new fs processes based on the user inputs
+    NewPids = lists:foldl(fun
+        (Dir, Acc) ->
+            Name = erlang:list_to_atom(Dir),
+            case file:read_link_info(Dir) of
+                {ok, #file_info{type = symlink}} ->
+                    Acc;
+                {ok, _} ->
+                    case fs:start_link(Name, Dir) of
+                        {ok, Pid} ->
+                            fs:subscribe(Name),
+                            [Pid | Acc];
+                        _ ->
+                            Acc
+                    end;
+                _ ->
+                    Acc
+            end
+    end, [], MonitorDirs),
+
+    %% It is possible that not all modules are discovered
+    %% by the time this process is ran. So, handle that
+    DirsNotDiscovered = lists:foldl(fun
+        (_, []) ->
+            [];
+        (Dir, Acc) ->
+            lists:filter(fun
+                (Match) ->
+                    string:split(Dir, Match) == [Dir]
+            end, Acc)
+    end, ReplaceDirs, MonitorDirs),
+
+    %% Restart the discovery process if needed ...
+    NewTimers = case DirsNotDiscovered == [] of
+        true ->
+             proplists:delete(discover_src_dirs, State#state.timers);
+        _ ->
+            T1 = schedule_cast(discover_modules, 3000, State#state.timers),
+            T2 = schedule_cast(discover_src_dirs, 4000, T1),
+            schedule_cast(discover_src_files, 5000, T2)
+    end,
+
+    gen_server:cast(?SERVER, compare_beams),
+    {noreply, State#state{
+        fsevents_pids = NewPids,
+        timers = NewTimers
+    }}.
 
 is_replace_dir(_, []) ->
     true;
