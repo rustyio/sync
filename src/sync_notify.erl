@@ -10,8 +10,11 @@
     growl_errors/1,
     growl_warnings/1,
     log_success/1,
+    log_success/2,
     log_errors/1,
-    log_warnings/1
+    log_errors/2,
+    log_warnings/1,
+    log_warnings/2
 ]).
 
 startup(Growl) ->
@@ -39,13 +42,22 @@ growl_warnings(Message) ->
     can_we_growl(warnings)
         andalso growl("warnings", "Warnings", Message).
 
+log_success(Msg, Vars) ->
+    log_success(io_lib:format(Msg, Vars)).
+
 log_success(Message) ->
     can_we_log(success)
         andalso error_logger:info_msg(lists:flatten(Message)).
 
+log_errors(Msg, Vars) ->
+    log_errors(io_lib:format(Msg, Vars)).
+
 log_errors(Message) ->
     can_we_log(errors)
         andalso error_logger:error_msg(lists:flatten(Message)).
+
+log_warnings(Msg, Vars) ->
+    log_warnings(io_lib:format(Msg, Vars)).
 
 log_warnings(Message) ->
     can_we_log(warnings)
