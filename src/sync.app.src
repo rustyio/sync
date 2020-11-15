@@ -5,7 +5,7 @@
     {vsn, "0.2.0"},
     {registered, []},
     {mod, { sync, []}},
-    {maintainers, ["Jesse Gumm", "Heinz N. Gies"]},
+    {maintainers, ["Rusty Klophaus", "Jesse Gumm", "Heinz N. Gies"]},
     {licenses, ["MIT"]},
     {links, [{"Github", "https://github.com/rustyio/sync"}]},
     {applications, [
