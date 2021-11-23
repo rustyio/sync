@@ -601,7 +601,7 @@ reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, W
     {ok, [], Warnings}.
 
 error_no_file(Module) ->
-    Msg = io_lib:format("~p:0: Couldn't load module: nofile~n", [Module]),
+    Msg = io_lib:format("~p Couldn't load module: nofile~n", [Module]),
     sync_notify:log_warnings([Msg]).
 
 recompile_src_file(SrcFile, _EnablePatching) ->
@@ -648,7 +648,7 @@ recompile_src_file(SrcFile, _EnablePatching) ->
 
 
 print_results(Module, SrcFile, [], []) ->
-    Msg = io_lib:format("~s:0: Recompiled.~n", [SrcFile]),
+    Msg = io_lib:format("~s: Recompiled.~n", [SrcFile]),
     case code:is_loaded(Module) of
         {file, _} ->
             ok;
@@ -660,7 +660,7 @@ print_results(Module, SrcFile, [], []) ->
 print_results(_Module, SrcFile, [], Warnings) ->
     Msg = [
         format_errors(SrcFile, [], Warnings),
-        io_lib:format("~s:0: Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
+        io_lib:format("~s Recompiled with ~p warnings~n", [SrcFile, length(Warnings)])
     ],
     sync_notify:growl_warnings(growl_format_errors([], Warnings)),
     sync_notify:log_warnings(Msg);
@@ -680,9 +680,10 @@ format_errors(File, Errors, Warnings) ->
     AllWarnings1 = lists:sort(lists:flatten([X || {_, X} <- Warnings])),
     AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
-    F = fun({Line, Prefix, Module, ErrorDescription}) ->
+    F = fun({Line0, Prefix, Module, ErrorDescription}) ->
         Msg = format_error(Module, ErrorDescription),
-        io_lib:format("~s:~p: ~s: ~s~n", [File, Line, Prefix, Msg])
+        Line = format_line(Line0),
+        io_lib:format("~s ~s: ~s: ~s~n", [File, Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
 
@@ -699,11 +700,18 @@ growl_format_errors(Errors, Warnings) ->
     AllWarnings1 = lists:sort(lists:flatten([X || {_, X} <- Warnings])),
     AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
-    F = fun({Line, Prefix, Module, ErrorDescription}) ->
+    F = fun({Line0, Prefix, Module, ErrorDescription}) ->
+        Line = format_line(Line0),
         Msg = format_error(Module, ErrorDescription),
-        io_lib:format("~p: ~s: ~s~n", [Line, Prefix, Msg])
+        io_lib:format("~s: ~s: ~s~n", [Line, Prefix, Msg])
     end,
     [F(X) || X <- Everything].
+
+format_line(Line) when is_integer(Line) ->
+    "(Line " ++ integer_to_list(Line) ++ ")";
+format_line({Line, Char}) ->
+    "(Line " ++ integer_to_list(Line) ++ ", Char " ++ integer_to_list(Char) ++ ")".
+
 
 process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFiles, Patching) ->
     %% Hrl hasn't changed, do nothing...
