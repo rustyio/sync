@@ -621,7 +621,9 @@ recompile_src_file(SrcFile, _EnablePatching) ->
     OldBinary = get_object_code(Module),
 
     case sync_options:get_options(SrcDir) of
-        {ok, Options} ->
+        {ok, Options0} ->
+            %% Event messages from fs may disrupt compile module, spawn it
+            Options = lists:delete(no_spawn_compiler_process, Options0),
             case CompileFun(SrcFile, [binary, return|Options]) of
                 {ok, Module, Binary, Warnings} ->
                     reload_if_necessary(CompileFun, SrcFile, Module, OldBinary, Binary, Options, Warnings);
