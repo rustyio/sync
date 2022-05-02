@@ -581,7 +581,15 @@ reload_if_necessary(_CompileFun, SrcFile, Module, Binary, Binary, _Options, Warn
 
 reload_if_necessary(CompileFun, SrcFile, Module, _OldBinary, _Binary, Options, Warnings) ->
     %% Compiling changed the beam code. Compile and reload.
-    CompileFun(SrcFile, Options),
+    case CompileFun(SrcFile, [return | Options]) of
+        {ok, _} ->
+            ok;
+        {ok, _, _} ->
+            ok;
+        CompileResult ->
+            sync_notify:log_warnings("Compile failed in reload_if_necessary(): ~p~n",
+                                     [CompileResult])
+    end,
     %% Try to load the module...
     case code:ensure_loaded(Module) of
         {module, Module} -> ok;
