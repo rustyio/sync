@@ -710,7 +710,9 @@ growl_format_errors(Errors, Warnings) ->
 format_line(Line) when is_integer(Line) ->
     "(Line " ++ integer_to_list(Line) ++ ")";
 format_line({Line, Char}) ->
-    "(Line " ++ integer_to_list(Line) ++ ", Char " ++ integer_to_list(Char) ++ ")".
+    "(Line " ++ integer_to_list(Line) ++ ", Char " ++ integer_to_list(Char) ++ ")";
+format_line(Other)->
+    io_lib:format("(Line: ~p)", [Other]).
 
 
 process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFiles, Patching) ->
