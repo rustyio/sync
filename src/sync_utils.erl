@@ -6,6 +6,8 @@
          get_filetype/1,
          get_src_dir/1,
          wildcard/2,
+         whitelisted_modules/0,
+         excluded_modules/0,
          get_env/2,
          set_env/2,
          file_last_modified_time/1,
@@ -274,6 +276,13 @@ get_src_dir(Dir, Ctr) ->
 wildcard(Dir, Regex) ->
     filelib:fold_files(Dir, Regex, true, fun(Y, Acc1) -> [Y|Acc1] end, []).
 
+
+whitelisted_modules() ->
+    get_env(whitelisted_modules, []).
+
+excluded_modules() ->
+    get_env(excluded_modules, []).
+
 %% @private Get an environment variable.
 get_env(Var, Default) ->
     case application:get_env(sync, Var) of
@@ -345,6 +354,8 @@ get_system_modules() ->
         parsetools,
         percept,
         pman,
+        rebar,
+        rebar3,
         reltool,
         runtime_tools,
         sasl,

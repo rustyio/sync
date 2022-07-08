@@ -51,7 +51,8 @@
     paused = false,
     sync_method = scanner,
     modified_files = [] :: [file:filename()],
-    fsevents_pids = []
+    fsevents_pids = [],
+    action_queue = queue:new()
 }).
 
 start_link() ->
@@ -67,7 +68,7 @@ rescan() ->
             io:format("Scanning source files...~n"),
             gen_server:cast(?SERVER, compare_src_files),
             gen_server:cast(?SERVER, compare_beams),
-            gen_server:cast(?SERVER, compare_hrl_files),
+            gen_server:cast(?SERVER, compare_hrl_files_init),
             ok;
         _ ->
             io:format("Listening on fsevents...~n"),
@@ -145,128 +146,31 @@ handle_cast(unpause, State) ->
 handle_cast(_, State) when State#state.paused==true ->
     %% If paused, just absorb the request and do nothing
     {noreply, State};
-handle_cast(discover_modules, State) ->
-    %% Get a list of all loaded non-system modules.
-    Modules = (erlang:loaded() -- sync_utils:get_system_modules()),
+handle_cast(info, State) ->
+    io:format("Modules: ~p~n", [State#state.modules]),
+    io:format("Source Dirs: ~p~n", [State#state.src_dirs]),
+    io:format("Source Files: ~p~n", [State#state.src_files]),
+    io:format("Queue Size: ~p~n", [queue:len(State#state.action_queue)]),
+    {noreply, State};
 
-    %% Delete excluded modules/applications
-    FilteredModules = filter_modules_to_scan(Modules),
-
-    %% Schedule the next interval...
-    NewTimers = case State#state.sync_method of
-        scanner -> schedule_cast(discover_modules, 30000, State#state.timers);
-        _ -> proplists:delete(discover_modules, State#state.timers)
-    end,
-
-    %% Return with updated modules...
-    NewState = State#state { modules=FilteredModules, timers=NewTimers },
+handle_cast(enable_patching, State) ->
+    NewState = State#state { patching = true },
     {noreply, NewState};
 
-handle_cast(discover_src_dirs, State) ->
-    case application:get_env(sync, src_dirs) of
-        undefined ->
-            discover_source_dirs(State, [], []);
-        {ok, {add, DirsAndOpts}} ->
-            discover_source_dirs(State, dirs(DirsAndOpts), []);
-        {ok, {replace, DirsAndOpts}} ->
-            discover_source_dirs(State, [], dirs(DirsAndOpts))
-    end;
-
-handle_cast(discover_src_files, State) ->
-    %% For each source dir, get a list of source files...
-    F = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.(erl|dtl|lfe|ex)$") ++ Acc
+handle_cast(process_queue, State) ->
+    NewState = case queue:out(State#state.action_queue) of
+        {empty, _} ->
+            State;
+        {{value, Action}, NewQ} ->
+            State2 = State#state{action_queue=NewQ},
+            process_queue_item(Action, State2)
     end,
-    ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
+    NewTimers = schedule_cast(process_queue, 100, State#state.timers),
+    NewState2 = NewState#state{timers=NewTimers},
+    {noreply, NewState2};
 
-    %% For each include dir, get a list of hrl files...
-    Fhrl = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.hrl$") ++ Acc
-    end,
-    HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
-
-    %% Schedule the next interval...
-    NewTimers = case State#state.sync_method of
-        scanner -> schedule_cast(discover_src_files, 5000, State#state.timers);
-        _ -> proplists:delete(discover_src_files, State#state.timers)
-    end,
-
-    %% Return with updated files...
-    NewState = State#state { src_files=ErlFiles, hrl_files=HrlFiles, timers=NewTimers },
-    {noreply, NewState};
-
-handle_cast(compare_beams, State) ->
-    %% Create a list of beam file lastmod times, but filter out modules not having 
-    %% a valid beam file reference.
-    F = fun(X) ->
-        case code:which(X) of
-            Beam when is_list(Beam) ->
-                case filelib:last_modified(Beam) of
-                    0 ->
-                        false; %% file not found
-                    LastMod ->
-                        {true, {X, LastMod}}
-                end;
-            _Other ->
-                false %% non_existing | cover_compiled | preloaded
-        end
-    end,
-    NewBeamLastMod = lists:usort(lists:filtermap(F, State#state.modules)),
-
-    %% Compare to previous results, if there are changes, then reload
-    %% the beam...
-    process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod, State#state.patching),
-
-    %% Schedule the next interval...
-    NewTimers = case State#state.sync_method of
-        scanner -> schedule_cast(compare_beams, 2000, State#state.timers);
-        _ -> proplists:delete(compare_beams, State#state.timers)
-    end,
-
-    %% Return with updated beam lastmod...
-    NewState = State#state { beam_lastmod=NewBeamLastMod, timers=NewTimers },
-    {noreply, NewState};
-
-handle_cast(compare_src_files, State) ->
-    %% Create a list of file lastmod times...
-    F = fun(X) ->
-        LastMod = filelib:last_modified(X),
-        {X, LastMod}
-    end,
-    NewSrcFileLastMod = lists:usort([F(X) || X <- State#state.src_files]),
-
-    %% Compare to previous results, if there are changes, then recompile the file...
-    process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod, State#state.patching),
-
-    %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_src_files, 1000, State#state.timers),
-
-    %% Return with updated src_file lastmod...
-    NewState = State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers },
-    {noreply, NewState};
-
-handle_cast(compare_hrl_files, State) ->
-    %% Create a list of file lastmod times...
-    F = fun(X) ->
-        LastMod = filelib:last_modified(X),
-        {X, LastMod}
-    end,
-    NewHrlFileLastMod = lists:usort([F(X) || X <- State#state.hrl_files]),
-
-    %% Compare to previous results, if there are changes, then recompile src files that depends
-    process_hrl_file_lastmod(State#state.hrl_file_lastmod, NewHrlFileLastMod, State#state.src_files, State#state.patching),
-
-    %% Schedule the next interval...
-    NewTimers = schedule_cast(compare_hrl_files, 2000, State#state.timers),
-
-    %% Return with updated hrl_file lastmod...
-    NewState = State#state { hrl_file_lastmod=NewHrlFileLastMod, timers=NewTimers },
-    {noreply, NewState};
-
-handle_cast(fsevents_modified_files,
-        #state{
-            modified_files = Files, patching = Patching, src_files = SrcFiles, modules = OldModules
-        } = State) when Files /= [] ->
+handle_cast(fsevents_modified_files, State = #state{modified_files=Files}) when Files =/= [] ->
+    #state{patching=Patching, src_files=SrcFiles, modules=OldModules} = State,
     Recompile = fun(F, P) ->
         recompile_src_file(F, P),
         {_, M} = determine_compile_fun_and_module_name(F),
@@ -296,23 +200,140 @@ handle_cast(fsevents_modified_files,
         R -> lists:usort(OldModules ++ R)
     end,
 
-    {noreply, State#state{
-        modified_files = [],
-        modules = NewModules
-    }};
-
-handle_cast(info, State) ->
-    io:format("Modules: ~p~n", [State#state.modules]),
-    io:format("Source Dirs: ~p~n", [State#state.src_dirs]),
-    io:format("Source Files: ~p~n", [State#state.src_files]),
-    {noreply, State};
-
-handle_cast(enable_patching, State) ->
-    NewState = State#state { patching = true },
+    NewState = State#state{modified_files = [], modules = NewModules},
     {noreply, NewState};
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(Action, State) ->
+    Q = State#state.action_queue,
+    NewState = case queue:member(Action, Q) of
+        true ->
+            State;
+        false ->
+            NewTimers = schedule_cast(process_queue, 100, State#state.timers),
+            NewQ = queue:in(Action, Q),
+            State#state{action_queue=NewQ, timers=NewTimers}
+    end,
+    {noreply, NewState}.
+
+
+process_queue_item(discover_modules, State) ->
+
+    %% Get a list of all loaded non-system modules.
+    Modules = (erlang:loaded() -- sync_utils:get_system_modules()),
+
+    %% Delete excluded modules/applications
+    FilteredModules = filter_modules_to_scan(Modules),
+
+    %% Schedule the next interval...
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(discover_modules, 30000, State#state.timers);
+        _ -> proplists:delete(discover_modules, State#state.timers)
+    end,
+
+    %% Return with updated modules...
+    State#state { modules=FilteredModules, timers=NewTimers };
+
+process_queue_item(discover_src_dirs, State) ->
+    {noreply, NewState} = case application:get_env(sync, src_dirs) of
+        undefined ->
+            discover_source_dirs(State, [], []);
+        {ok, {add, DirsAndOpts}} ->
+            discover_source_dirs(State, dirs(DirsAndOpts), []);
+        {ok, {replace, DirsAndOpts}} ->
+            discover_source_dirs(State, [], dirs(DirsAndOpts))
+    end,
+    NewState;
+
+process_queue_item(discover_src_files, State) ->
+    %% For each source dir, get a list of source files...
+    F = fun(X, Acc) ->
+        sync_utils:wildcard(X, ".*\\.(erl|dtl|lfe|ex)$") ++ Acc
+    end,
+    ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
+
+    %% For each include dir, get a list of hrl files...
+    Fhrl = fun(X, Acc) ->
+        sync_utils:wildcard(X, ".*\\.hrl$") ++ Acc
+    end,
+    HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
+
+    %% Schedule the next interval...
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(discover_src_files, 5000, State#state.timers);
+        _ -> proplists:delete(discover_src_files, State#state.timers)
+    end,
+
+    %% Return with updated files...
+    State#state { src_files=ErlFiles, hrl_files=HrlFiles, timers=NewTimers };
+
+process_queue_item(compare_beams, State) ->
+    %% Create a list of beam file lastmod times, but filter out modules not having 
+    %% a valid beam file reference.
+    F = fun(X) ->
+        case code:which(X) of
+            Beam when is_list(Beam) ->
+                case filelib:last_modified(Beam) of
+                    0 ->
+                        false; %% file not found
+                    LastMod ->
+                        {true, {X, LastMod}}
+                end;
+            _Other ->
+                false %% non_existing | cover_compiled | preloaded
+        end
+    end,
+    NewBeamLastMod = lists:usort(lists:filtermap(F, State#state.modules)),
+
+    %% Compare to previous results, if there are changes, then reload
+    %% the beam...
+    process_beam_lastmod(State#state.beam_lastmod, NewBeamLastMod, State#state.patching),
+
+    %% Schedule the next interval...
+    NewTimers = case State#state.sync_method of
+        scanner -> schedule_cast(compare_beams, 2000, State#state.timers);
+        _ -> proplists:delete(compare_beams, State#state.timers)
+    end,
+
+    %% Return with updated beam lastmod...
+    State#state { beam_lastmod=NewBeamLastMod, timers=NewTimers };
+
+process_queue_item(compare_src_files, State) ->
+    %% Create a list of file lastmod times...
+    F = fun(X) ->
+        LastMod = filelib:last_modified(X),
+        {X, LastMod}
+    end,
+    NewSrcFileLastMod = lists:usort([F(X) || X <- State#state.src_files]),
+
+    %% Compare to previous results, if there are changes, then recompile the file...
+    process_src_file_lastmod(State#state.src_file_lastmod, NewSrcFileLastMod, State#state.patching),
+
+    %% Schedule the next interval...
+    NewTimers = schedule_cast(compare_src_files, 1000, State#state.timers),
+
+    %% Return with updated src_file lastmod...
+    State#state { src_file_lastmod=NewSrcFileLastMod, timers=NewTimers };
+
+process_queue_item(compare_hrl_files_init, State) ->
+    process_queue_item({compare_hrl_files, init}, State);
+process_queue_item(compare_hrl_files, State) ->
+    process_queue_item({compare_hrl_files, normal}, State);
+process_queue_item({compare_hrl_files, Method}, State) ->
+    %% Create a list of file lastmod times...
+    F = fun(X) ->
+        LastMod = filelib:last_modified(X),
+        {X, LastMod}
+    end,
+    NewHrlFileLastMod = lists:usort([F(X) || X <- State#state.hrl_files]),
+
+    %% Compare to previous results, if there are changes, then recompile src files that depends
+    process_hrl_file_lastmod(State#state.hrl_file_lastmod, NewHrlFileLastMod, State#state.src_files, State#state.patching, Method),
+    
+    %% Schedule the next interval...
+    NewTimers = schedule_cast(compare_hrl_files, 2000, State#state.timers),
+
+    %% Return with updated hrl_file lastmod...
+    State#state { hrl_file_lastmod=NewHrlFileLastMod, timers=NewTimers }.
 
 dirs(DirsAndOpts) ->
     [begin
@@ -538,6 +559,7 @@ lfe_compile(SrcFile, Options) ->
 
 maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     Module = list_to_atom(filename:basename(File, ".erl")),
+    file:write_file("recompile.log", ["Checking ",atom_to_list(Module),"\n"], [append]),
     case code:which(Module) of
         BeamFile when is_list(BeamFile) ->
             %% check with beam file
@@ -613,6 +635,7 @@ error_no_file(Module) ->
     sync_notify:log_warnings([Msg]).
 
 recompile_src_file(SrcFile, _EnablePatching) ->
+    file:write_file("recompile.log", [SrcFile, "\n"], [append]),
     %% Get the module, src dir, and options...
     {ok, SrcDir} = sync_utils:get_src_dir(SrcFile),
     {CompileFun, Module} = determine_compile_fun_and_module_name(SrcFile),
@@ -724,46 +747,65 @@ format_line({Line, Char}) ->
 format_line(Other)->
     io_lib:format("(Line: ~p)", [Other]).
 
+process_hrl_file_lastmod(Files1, Files2, SrcFiles, Patching, Method) ->
+    SrcFileMaybeHeaders = case Method of
+        init -> pre_get_includes(SrcFiles);
+        _ -> SrcFiles
+    end,
+    NewFiles = inner_process_hrl_file_lastmod(Files1, Files2, SrcFileMaybeHeaders),
+    UniqueFiles = dedup_modules(NewFiles),
+    lists:foreach(fun({SrcFile, LastMod}) ->
+        maybe_recompile_src_file(SrcFile, LastMod, Patching)
+    end, UniqueFiles).
 
-process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFiles, Patching) ->
+
+dedup_modules(ModulesWithModTimes) ->
+    Map = lists:foldl(fun({Module, LastMod}, Acc) ->
+        case maps:find(Module, Acc) of
+            error -> maps:put(Module, LastMod, Acc);
+            {ok, ThisMod} when LastMod > ThisMod -> maps:put(Module, LastMod, Acc);
+            _ -> Acc
+        end
+    end, #{}, ModulesWithModTimes),
+    maps:to_list(Map).
+
+inner_process_hrl_file_lastmod([{File, LastMod}|T1], [{File, LastMod}|T2], SrcFileHeaders) ->
     %% Hrl hasn't changed, do nothing...
-    process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
-process_hrl_file_lastmod([{File, _}|T1], [{File, _}|T2], SrcFiles, Patching) ->
+    inner_process_hrl_file_lastmod(T1, T2, SrcFileHeaders);
+inner_process_hrl_file_lastmod([{File, LastMod1}|T1], [{File, LastMod2}|T2], SrcFileHeaders) ->
     %% File has changed, recompile...
-    WhoInclude = who_include(File, SrcFiles),
-    [recompile_src_file(SrcFile, Patching) || SrcFile <- WhoInclude],
-    process_hrl_file_lastmod(T1, T2, SrcFiles, Patching);
-process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFiles, Patching) ->
+    LastMod = lists:max([LastMod1, LastMod2]),
+    WhoInclude = [{Module, LastMod} || Module <- who_include(File, SrcFileHeaders)],
+    WhoInclude ++ inner_process_hrl_file_lastmod(T1, T2, SrcFileHeaders);
+inner_process_hrl_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], SrcFileHeaders) ->
     %% Lists are different...
     case File1 < File2 of
         true ->
             %% File was removed, do nothing...
-            warn_deleted_hrl_files(File1, SrcFiles),
-            process_hrl_file_lastmod(T1, [{File2, LastMod2}|T2], SrcFiles, Patching);
+            warn_deleted_hrl_files(File1, SrcFileHeaders),
+            inner_process_hrl_file_lastmod(T1, [{File2, LastMod2}|T2], SrcFileHeaders);
         false ->
             %% File is new, look for src that include it
-            WhoInclude = who_include(File2, SrcFiles),
-            [maybe_recompile_src_file(SrcFile, LastMod2, Patching) || SrcFile <- WhoInclude],
-            process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFiles, Patching)
+            WhoInclude = [{Module, LastMod2} || Module <- who_include(File2, SrcFileHeaders)],
+            WhoInclude ++ inner_process_hrl_file_lastmod([{File1, LastMod1}|T1], T2, SrcFileHeaders)
     end;
-process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFiles, Patching) ->
+inner_process_hrl_file_lastmod([], [{File, LastMod}|T2], SrcFileHeaders) ->
     %% File is new, look for src that include it
-    WhoInclude = who_include(File, SrcFiles),
-    [maybe_recompile_src_file(SrcFile, LastMod, Patching) || SrcFile <- WhoInclude],
-    process_hrl_file_lastmod([], T2, SrcFiles, Patching);
-process_hrl_file_lastmod([{File1, _LastMod1}|T1], [], SrcFiles, Patching) ->
+    WhoInclude = [{Module, LastMod} || Module <- who_include(File, SrcFileHeaders)],
+    WhoInclude ++ inner_process_hrl_file_lastmod([], T2, SrcFileHeaders);
+inner_process_hrl_file_lastmod([{File1, _LastMod1}|T1], [], SrcFileHeaders) ->
     %% Rest of file(s) removed, warn and process next
-    warn_deleted_hrl_files(File1, SrcFiles),
-    process_hrl_file_lastmod(T1, [], SrcFiles, Patching);
-process_hrl_file_lastmod([], [], _, _) ->
+    warn_deleted_hrl_files(File1, SrcFileHeaders),
+    inner_process_hrl_file_lastmod(T1, [], SrcFileHeaders);
+inner_process_hrl_file_lastmod([], [], _) ->
     %% Done
-    ok;
-process_hrl_file_lastmod(undefined, _Other, _,  _) ->
+    [];
+inner_process_hrl_file_lastmod(undefined, _Other, _) ->
     %% First load, do nothing
-    ok.
+    [].
 
-warn_deleted_hrl_files(HrlFile, SrcFiles) ->
-    WhoInclude = who_include(HrlFile, SrcFiles),
+warn_deleted_hrl_files(HrlFile, SrcFileHeaders) ->
+    WhoInclude = who_include(HrlFile, SrcFileHeaders),
     case WhoInclude of
         [] -> ok;
         _ -> io:format(
@@ -771,13 +813,35 @@ warn_deleted_hrl_files(HrlFile, SrcFiles) ->
                 [filename:basename(HrlFile), lists:map(fun(File) -> filename:basename(File) end, WhoInclude)])
     end.
 
-who_include(HrlFile, SrcFiles) ->
-    HrlFileBaseName = filename:basename(HrlFile),
-    Pred = fun(SrcFile) ->
+pre_get_includes(SrcFiles) ->
+    lists:map(fun(SrcFile) ->
         {ok, Forms} = epp_dodger:parse_file(SrcFile),
-        is_include(HrlFileBaseName, Forms)
-        end,
-    lists:filter(Pred, SrcFiles).
+        Includes = extract_include(Forms),
+        {SrcFile, Includes}
+    end, SrcFiles).
+    
+
+who_include(HrlFile, SrcFilesMaybeWithHeaders) ->
+    HrlFileBaseName = filename:basename(HrlFile),
+    Pred = fun
+        ({SrcFile, Headers}) ->
+            case lists:member(HrlFileBaseName, Headers) of
+                true -> {true, SrcFile};
+                false -> false
+            end;
+        (SrcFile) ->
+            {ok, Forms} = epp_dodger:parse_file(SrcFile),
+            is_include(HrlFileBaseName, Forms)
+    end,
+    lists:filtermap(Pred, SrcFilesMaybeWithHeaders).
+
+extract_include([]) ->
+    [];
+extract_include([{tree, attribute, _, {attribute, _, [{_, _, IncludeFile}]}} | Forms]) when is_list(IncludeFile) ->
+    IncludeFileBaseName = filename:basename(IncludeFile),
+    [IncludeFileBaseName | extract_include(Forms)];
+extract_include([_|Forms]) ->
+    extract_include(Forms).
 
 is_include(_HrlFile, []) ->
     false;
@@ -792,41 +856,19 @@ is_include(HrlFile, [_SomeForm | Forms]) ->
 
 %% @private Filter the modules to be scanned.
 filter_modules_to_scan(Modules) ->
-    exclude_modules_to_scan(whitelist_modules_to_scan(Modules)).
+    Whitelist = sync_utils:whitelisted_modules(),
+    Exclude = sync_utils:excluded_modules(),
+    filter_modules(Modules, Whitelist, Exclude).
+    
 
-%% @private Filter the whitelisted modules.
-whitelist_modules_to_scan(Modules) ->
-    case application:get_env(sync, whitelisted_modules) of
-        {ok, WhitelistedModules} when is_list(WhitelistedModules) andalso
-                                   WhitelistedModules =/= []->
-            lists:foldl(fun(Module, Acc) ->
-                                case module_matches(Module, WhitelistedModules) of
-                                    true ->
-                                        [Module | Acc];
-                                    false ->
-                                        Acc
-                                end
-                        end, [], Modules);
-        _ ->
-            Modules
-    end.
+filter_modules(Modules, Whitelist, Exclude) ->
+    lists:filter(fun(Module) ->
+        Whitelisted = module_matches(Module, Whitelist),
+        Excluded = module_matches(Module, Exclude),
 
-%% @private Filter the excluded modules.
-exclude_modules_to_scan(Modules) ->
-    case application:get_env(sync, excluded_modules) of
-        {ok, ExcludedModules} when is_list(ExcludedModules) andalso
-                                   ExcludedModules =/= []->
-            lists:foldl(fun(Module, Acc) ->
-                                case module_matches(Module, ExcludedModules) of
-                                    true ->
-                                        Acc;
-                                    false ->
-                                        [Module | Acc]
-                                end
-                        end, [], Modules);
-        _ ->
-            Modules
-    end.
+        Whitelisted orelse not(Excluded)
+    end, Modules).
+    
 
 module_matches(_Module, []) ->
     false;
