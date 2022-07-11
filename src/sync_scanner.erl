@@ -11,6 +11,7 @@
     start_link/0,
     rescan/0,
     info/0,
+    queue_size/0,
     enable_patching/0,
     pause/0,
     unpause/0
@@ -73,7 +74,8 @@ rescan() ->
         _ ->
             io:format("Listening on fsevents...~n"),
             ok
-    end.
+    end,
+    gen_server:cast(?SERVER, notify_when_empty).
 
 unpause() ->
     gen_server:cast(?SERVER, unpause),
@@ -89,6 +91,9 @@ info() ->
     io:format("Sync Info...~n"),
     gen_server:cast(?SERVER, info),
     ok.
+
+queue_size() ->
+    gen_server:call(?SERVER, queue_size).
 
 set_growl(T) when ?LOG_OR_GROWL_ON(T) ->
     sync_utils:set_env(growl,all),
@@ -135,10 +140,25 @@ init([]) ->
         sync_method = sync_utils:get_env(sync_method, scanner)
     }}.
 
+handle_call(queue_size, _From, State) ->
+    Size = queue:len(State#state.action_queue),
+    {reply, Size, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+handle_cast(notify_when_empty, State) ->
+    case queue:len(State#state.action_queue) of
+        0 ->
+            io:format("~nSync Queue is empty. Sync is ready and actively watching for changes...~n"),
+            NewTimers = proplists:delete(notify_when_empty, State#state.timers),
+            NewState = State#state{timers=NewTimers},
+            {noreply, NewState};
+        _ ->
+            NewTimers = schedule_cast(notify_when_empty, 100, State#state.timers),
+            NewState = State#state{timers=NewTimers},
+            {noreply, NewState}
+    end;
 handle_cast(pause, State) ->
     {noreply, State#state {paused=true}};
 handle_cast(unpause, State) ->
