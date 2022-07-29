@@ -19,7 +19,7 @@ recompiles the code, and reloads the module.
 ```erlang
 {deps, [
 		{sync, ".*",
-			{git, "git://github.com/rustyio/sync.git", {branch, "master"}}}
+			{git, "https://github.com/rustyio/sync.git", {branch, "master"}}}
 ]}.
 ```
 
@@ -134,7 +134,7 @@ The `log` value can be specified in any of the following ways:
 
 #### 1. Loaded from a .config file
 
-	{log, all},	
+	{log, all},
 	{log, [success, warnings]},
 
 #### 2. As an environment variable called from the erlang command line:
@@ -189,7 +189,7 @@ The `growl` value can be specified in any of the following ways:
 
 #### 1. Loaded from a .config file
 
-	{growl, all},	
+	{growl, all},
 	{growl, [success, warnings]},
 
 #### 2. As an environment variable called from the erlang command line:
@@ -275,7 +275,7 @@ You can register a post-hook with:
 
 ```erlang
 sync:onsync(fun(Mods) ->
-				io:format("Reloaded Modules: ~p~n",[Mods]) 
+				io:format("Reloaded Modules: ~p~n",[Mods])
 			end).
 ```
 
