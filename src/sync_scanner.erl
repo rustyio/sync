@@ -883,10 +883,14 @@ filter_modules_to_scan(Modules) ->
 
 filter_modules(Modules, Whitelist, Exclude) ->
     lists:filter(fun(Module) ->
-        Whitelisted = module_matches(Module, Whitelist),
         Excluded = module_matches(Module, Exclude),
-
-        Whitelisted orelse not(Excluded)
+        case Whitelist of
+            [] ->
+                not(Excluded);
+            _ ->
+                Whitelisted = module_matches(Module, Whitelist),
+                Whitelisted andalso not(Excluded)
+        end
     end, Modules).
     
 
