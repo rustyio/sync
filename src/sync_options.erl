@@ -8,8 +8,11 @@
     start_link/0,
     get_onsync/0,
     set_onsync/1,
+    clear_onsync/0,
     get_options/1,
-    set_options/2
+    set_options/2,
+    autotest/1,
+    enable_autotest/0
 ]).
 
 %% gen_server callbacks
@@ -39,6 +42,9 @@ get_onsync() ->
 set_onsync(Fun) ->
     gen_server:call(?SERVER, {set_onsync, Fun}).
 
+clear_onsync() ->
+    set_onsync(undefined).
+
 %% @private If options are not found for this directory, keep checking the
 %% parent directories for options
 get_options([]) ->
@@ -50,6 +56,34 @@ get_options(SrcDir) ->
         undefined ->
             get_options(filename:dirname(SrcDir))
     end.
+
+enable_autotest() ->
+    set_onsync(fun ?MODULE:autotest/1).
+
+autotest([Mod|Rest]) ->
+    case erlang:function_exported(Mod, test, 0) of
+        true ->
+            try Mod:test() of
+                ok ->
+                    Msg = io_lib:format("~s: All Tests Passed~n", [Mod]),
+                    sync_notify:log_success(Msg);
+                Reason ->
+                    Msg = io_lib:format("~s: Tests Failed: ~p~n", [Mod, Reason]),
+                    sync_notify:log_errors(Msg),
+                    sync_notify:growl_errors(Msg)
+            catch
+                T:E:S ->
+                    Msg = io_lib:format("~s: Tests Crashed: ~p:~p~n",[Mod, T, E]),
+                    WithStacktrace = [Msg, io_lib:format("Stacktrace: ~p~n",[S])],
+                    sync_notify:log_errors(WithStacktrace),
+                    sync_notify:growl_errors(Msg)
+            end;
+        false ->
+            ok %% nothing to do here
+    end,
+    autotest(Rest);
+autotest([]) ->
+    ok.
 
 set_options(SrcDir, Options) ->
     gen_server:call(?SERVER, {set_options, SrcDir, Options}).

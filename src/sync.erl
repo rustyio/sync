@@ -16,7 +16,9 @@
     stop/0,
     growl/1,growl/0,
     log/1,log/0,
-    onsync/1,onsync/0
+    onsync/1,onsync/0,
+    enable_autotest/0,
+    disable_autotest/0
 ]).
 
 %% Application Callbacks.
@@ -82,6 +84,15 @@ onsync(Fun) ->
 
 onsync() ->
     sync_options:get_onsync().
+
+clear_onsync() ->
+    sync_options:clear_onsync().
+
+enable_autotest() ->
+    sync_options:enable_autotest().
+
+disable_autotest() ->
+    clear_onsync().
 
 %% ----------------------------------------------------------------------
 %% Application Callbacks

@@ -300,7 +300,15 @@ A post-hook can also be specified as a `{Module,Function}` tuple, which assumes
 
 To unregister a post-hook, call
 
-	sync:onsync(undefined).
+	sync:clear_onsync().
+
+### Registering Automatic Tests
+
+There is a handy shortcut to enable automatic tests using the Sync post-hooks, you can simply call:
+
+```erlang
+sync:enable_autotest().
+```
 
 ## Whitelisting/Excluding modules from the scanning process
 
