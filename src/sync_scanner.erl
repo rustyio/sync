@@ -183,7 +183,8 @@ handle_cast(process_queue, State) ->
             State;
         {{value, Action}, NewQ} ->
             State2 = State#state{action_queue=NewQ},
-            process_queue_item(Action, State2)
+            {_Time, State3} = timer:tc(fun() -> process_queue_item(Action, State2) end),
+            State3
     end,
     NewTimers = schedule_cast(process_queue, 100, State#state.timers),
     NewState2 = NewState#state{timers=NewTimers},
@@ -269,13 +270,13 @@ process_queue_item(discover_src_files, State) ->
     F = fun(X, Acc) ->
         sync_utils:wildcard(X, ".*\\.(erl|dtl|lfe|ex)$") ++ Acc
     end,
-    ErlFiles = lists:usort(lists:foldl(F, [], State#state.src_dirs)),
+    {_ErlTime, ErlFiles} = timer:tc(fun() -> lists:usort(lists:foldl(F, [], State#state.src_dirs)) end),
 
     %% For each include dir, get a list of hrl files...
     Fhrl = fun(X, Acc) ->
         sync_utils:wildcard(X, ".*\\.hrl$") ++ Acc
     end,
-    HrlFiles = lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)),
+    {_HrlTime, HrlFiles} = timer:tc(fun() -> lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)) end),
 
     %% Schedule the next interval...
     NewTimers = case State#state.sync_method of
