@@ -370,8 +370,10 @@ get_system_modules() ->
         webtool,
         wx,
         xmerl,
-        zlib
+        zlib | 
+        get_rebar_apps()
     ],
+
     F = fun(App) ->
         case application:get_key(App, modules) of
             {ok, Modules} -> Modules;
@@ -379,3 +381,12 @@ get_system_modules() ->
         end
     end,
     lists:flatten([F(X) || X <- Apps]).
+
+get_rebar_apps() ->
+    [App || {App, _, _} <- application:loaded_applications(), is_rebar_app(App)].
+
+is_rebar_app(App) ->
+    case atom_to_list(App) of
+        "rebar3_" ++ _ -> true;
+        _ -> false
+    end.
