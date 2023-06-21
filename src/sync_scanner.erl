@@ -736,10 +736,50 @@ format_errors(File, Errors, Warnings) ->
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
     F = fun({Line0, Prefix, Module, ErrorDescription}) ->
         Msg = format_error(Module, ErrorDescription),
-        Line = format_line(Line0),
-        io_lib:format("~s ~s: ~s: ~s~n", [File, Line, Prefix, Msg])
+        case Line0 of
+            {LineNum, Char} ->
+                LineData = format_line_text(File, Prefix, Msg,  LineNum, Char),
+                io_lib:format("~s:~ts~n", [File, LineData]);
+            LineNum ->
+                io_lib:format("~s ~s: ~s: ~ts~n", [File, LineNum, Prefix, Msg])
+        end
     end,
     [F(X) || X <- Everything].
+
+format_line_text(File, MsgPrefix, Msg, LineNum, Char) when is_integer(LineNum), LineNum > 0, is_integer(Char), Char > 0 ->
+    {ok, F} = file:open(File, [read]),
+    lists:foreach(fun(_) ->
+        {ok, _} = file:read_line(F)
+    end, lists:seq(1, LineNum-1)),
+    {ok, LineStr0} = file:read_line(F),
+    LineStr = replace_tabs_with_spaces(LineStr0),
+    Prefix = "Line " ++ wf:to_list(LineNum) ++ ": ",
+    PrefixLen = length(Prefix),
+    %Arrow = "↑",
+    %Arrow = "🠉",
+    %Arrow = "🠕",
+    %Arrow = "🡅",
+    %Arrow = "▲",
+    Arrow = "🭯",
+    %Arrow = "^",
+    %Arrow = "ᐃ",
+    %Arrow = "🠑",
+
+    UpArrow = lists:duplicate(Char+PrefixLen-1, " ") ++ Arrow,
+    HorizontalLine = "   ╭" ++ lists:duplicate(Char+PrefixLen-5, "─") ++ "╯",
+    [
+        io_lib:format("~s:~n~s~ts~ts~n~ts~n~s: ~ts~n", [File, Prefix, LineStr, UpArrow, HorizontalLine, MsgPrefix, Msg])
+    ].
+ 
+replace_tabs_with_spaces(Bin) when is_binary(Bin) ->
+    replace_tabs_with_spaces(unicode:characters_to_list(Bin));
+replace_tabs_with_spaces([$\t|T]) ->
+    "    " ++ replace_tabs_with_spaces(T);
+replace_tabs_with_spaces([H|T]) ->
+    [H|replace_tabs_with_spaces(T)];
+replace_tabs_with_spaces([]) ->
+    [].
+
 
 format_error(Module, ErrorDescription) ->
     case erlang:function_exported(Module, format_error, 1) of

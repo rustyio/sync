@@ -9,7 +9,7 @@ dialyzer: rebar3
 travis: dialyzer
 
 publish: rebar3
-	./rebar3 hex publish
+	./rebar3 hex publish package
 
 clean:
 	rm -f rebar3
