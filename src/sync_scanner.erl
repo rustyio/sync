@@ -726,34 +726,40 @@ print_results(_Module, SrcFile, Errors, Warnings) ->
     sync_notify:growl_errors(growl_format_errors(Errors, Warnings)),
     sync_notify:log_errors(Msg).
 
+% ☢ ☣ ⚠ ☠
+message_prefix(error) ->
+    "☠ Error";
+message_prefix(warning) ->
+    "⚠ Warning".
 
 %% @private Print error messages in a pretty and user readable way.
 format_errors(File, Errors, Warnings) ->
     AllErrors1 = lists:sort(lists:flatten([X || {_, X} <- Errors])),
-    AllErrors2 = [{Line, "Error", Module, Description} || {Line, Module, Description} <- AllErrors1],
+    AllErrors2 = [{Line, error, Module, Description} || {Line, Module, Description} <- AllErrors1],
     AllWarnings1 = lists:sort(lists:flatten([X || {_, X} <- Warnings])),
-    AllWarnings2 = [{Line, "Warning", Module, Description} || {Line, Module, Description} <- AllWarnings1],
+    AllWarnings2 = [{Line, warning, Module, Description} || {Line, Module, Description} <- AllWarnings1],
     Everything = lists:sort(AllErrors2 ++ AllWarnings2),
-    F = fun({Line0, Prefix, Module, ErrorDescription}) ->
+    F = fun({Line0, Type, Module, ErrorDescription}) ->
         Msg = format_error(Module, ErrorDescription),
         case Line0 of
             {LineNum, Char} ->
-                LineData = format_line_text(File, Prefix, Msg,  LineNum, Char),
-                io_lib:format("~s:~ts~n", [File, LineData]);
+                LineData = format_line_text(File, Type, Msg,  LineNum, Char),
+                LineData;
+                %io_lib:format("~s:~ts~n", [File, LineData]);
             LineNum ->
-                io_lib:format("~s ~s: ~s: ~ts~n", [File, LineNum, Prefix, Msg])
+                io_lib:format("~ts ~ts: ~s: ~ts~n", [File, LineNum, message_prefix(Type), Msg])
         end
     end,
     [F(X) || X <- Everything].
 
-format_line_text(File, MsgPrefix, Msg, LineNum, Char) when is_integer(LineNum), LineNum > 0, is_integer(Char), Char > 0 ->
+format_line_text(File, Type, Msg, LineNum, Char) when is_integer(LineNum), LineNum > 0, is_integer(Char), Char > 0 ->
     {ok, F} = file:open(File, [read]),
     lists:foreach(fun(_) ->
         {ok, _} = file:read_line(F)
     end, lists:seq(1, LineNum-1)),
     {ok, LineStr0} = file:read_line(F),
     LineStr = replace_tabs_with_spaces(LineStr0),
-    Prefix = "Line " ++ wf:to_list(LineNum) ++ ": ",
+    Prefix = "Line " ++ wf:to_list(LineNum) ++ "│ ",
     PrefixLen = length(Prefix),
     %Arrow = "↑",
     %Arrow = "🠉",
@@ -764,13 +770,108 @@ format_line_text(File, MsgPrefix, Msg, LineNum, Char) when is_integer(LineNum), 
     %Arrow = "^",
     %Arrow = "ᐃ",
     %Arrow = "🠑",
+    %
 
-    UpArrow = lists:duplicate(Char+PrefixLen-1, " ") ++ Arrow,
-    HorizontalLine = "   ╭" ++ lists:duplicate(Char+PrefixLen-5, "─") ++ "╯",
-    [
-        io_lib:format("~s:~n~s~ts~ts~n~ts~n~s: ~ts~n", [File, Prefix, LineStr, UpArrow, HorizontalLine, MsgPrefix, Msg])
-    ].
- 
+    MaxWidth = 80,
+    LineLen = length(LineStr),
+
+    WrapStyle = lines, %% error_icons,
+
+    %% below, we keep doing "+/-3" to many of the calculations to account for the
+    %% elipsis (...)
+    if
+        %% everything fits on one line, nothing special to do here.
+        LineLen =< MaxWidth ->
+            NewLineStr = LineStr,
+            NewChar = Char;
+
+        %% The line is longer than we want, but the error character is still
+        %% less than our max, so just truncate the end of the string
+        LineLen > MaxWidth andalso Char =< MaxWidth ->
+            {NewLineStr0, _} = lists:split(MaxWidth-3, LineStr),
+            NewLineStr = NewLineStr0 ++ "...\n",
+            NewChar = Char;
+
+        %% The error character is longer than our max, meaning the line must
+        %% also be longer than the max.  But also, if the errored character is
+        %% close to the end of the line, we'll just show the whole end of the
+        %% line, and cut off the front of it.
+        Char > MaxWidth andalso (LineLen-Char < MaxWidth/2) ->
+            Start = LineLen - MaxWidth + 3,
+            %% Get the end of the string
+            NewLineStr = "..." ++ string:slice(LineStr, Start, MaxWidth-3),
+            %% How much of the original string did we remove?
+            StrLenDiff = LineLen - length(NewLineStr),
+            %% Since we removed that much, let's cuyt off that much from the character as well
+            NewChar = Char - StrLenDiff;
+
+        %% This last configuration means the error is higher than the maxwidth,
+        %% but not close to the end of the string.  This means we want to get a
+        %% substring in the middle of the line with elipses on both ends of the
+        %% string.
+        Char > MaxWidth ->
+            %% Pulling Half the width
+            Start = Char - (MaxWidth div 2),
+            %% doing -6 here because we're doing 2 elipses (front and back of the string)
+            NewLineStr = "..." ++ string:slice(LineStr, Start, MaxWidth-6) ++ "...\n",
+            NewChar = Char - Start + 3
+    end,
+
+    UpArrow = lists:duplicate(NewChar+PrefixLen-1, " ") ++ Arrow,
+    HorizontalLine = "   ╭" ++ lists:duplicate(NewChar+PrefixLen-5, "─") ++ "╯",
+    AlmostFinalMessage = [
+        io_lib:format("~ts:~n~ts~ts~ts~n~ts~n~ts: ~ts~n", [File, Prefix, NewLineStr, UpArrow, HorizontalLine, message_prefix(Type), break_line(MaxWidth, Msg)])
+    ],
+    wrap_with(AlmostFinalMessage, Type, WrapStyle).
+
+break_line(MaxLength, Msg) when length(Msg) =< MaxLength ->
+    Msg;
+break_line(MaxLength, Msg) ->
+    {Part1, Rest} = lists:split(MaxLength, Msg),
+    [Part1, "\n", break_line(MaxLength, Rest)].
+
+
+
+wrap_with(Msg0, Type, lines) ->
+    Msg = unicode:characters_to_list(Msg0),
+    [H,V,UL,UR,BR,BL] = lines(Type),
+    MsgLines = string:split(Msg, "\n", all),
+    LongestLine = lists:max([length(X) || X <- MsgLines]),
+    MsgLines2 = [pad_end(string:chomp(X), LongestLine) || X <- MsgLines],
+    %NumLines = length(MsgLines2),
+    lists:flatten([
+        make_row(LongestLine, UL, H, UR),"\n",
+        [add_verts(Line, V) ++ "\n" || Line <- MsgLines2],
+        make_row(LongestLine, BL, H, BR),"\n"
+    ]).
+    
+
+pad_end(Line, ToLength) when length(Line) >= ToLength ->
+    Line;
+pad_end(Line, ToLength) ->
+    ToAdd = ToLength - length(Line),
+    Padding = lists:duplicate(ToAdd, $\s),
+    Line ++ Padding.
+    
+%% The total length of this row will be LineWidth+2
+make_row(LineWidth, Left, Horiz, Right) ->
+    lists:flatten([Left, lists:duplicate(LineWidth, Horiz), Right]).
+
+add_verts(Line, Vert) ->
+    lists:flatten([Vert, Line, Vert]).
+
+%first_middle_last([First|Rest]) ->
+%    {Middle, [Last]} = lists:split(length(Rest)-1, Rest),
+%    {First, Middle, Last}.
+
+
+
+%arranged with Straight lines first (horiz, then vert), then corners in CSS corner order: upper left, upper right, lower right, lower left.
+lines(error) ->
+    "═║╔╗╝╚";
+lines(warning) ->
+    "─│┌┐┘└".
+
 replace_tabs_with_spaces(Bin) when is_binary(Bin) ->
     replace_tabs_with_spaces(unicode:characters_to_list(Bin));
 replace_tabs_with_spaces([$\t|T]) ->
@@ -784,7 +885,7 @@ replace_tabs_with_spaces([]) ->
 format_error(Module, ErrorDescription) ->
     case erlang:function_exported(Module, format_error, 1) of
         true -> Module:format_error(ErrorDescription);
-        false -> io_lib:format("~s", [ErrorDescription])
+        false -> io_lib:format("~ts", [ErrorDescription])
     end.
 
 %% @private Print error messages in a pretty and user readable way.
