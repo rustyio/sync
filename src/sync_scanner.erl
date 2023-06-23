@@ -747,7 +747,7 @@ format_errors(File, Errors, Warnings) ->
                 LineData;
                 %io_lib:format("~s:~ts~n", [File, LineData]);
             LineNum ->
-                io_lib:format("~ts ~ts: ~s: ~ts~n", [File, LineNum, message_prefix(Type), Msg])
+                io_lib:format("~ts ~ts: ~ts: ~ts~n", [File, LineNum, message_prefix(Type), Msg])
         end
     end,
     [F(X) || X <- Everything].
