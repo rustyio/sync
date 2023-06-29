@@ -759,7 +759,7 @@ format_line_text(File, Type, Msg, LineNum, Char) when is_integer(LineNum), LineN
     end, lists:seq(1, LineNum-1)),
     {ok, LineStr0} = file:read_line(F),
     LineStr = replace_tabs_with_spaces(LineStr0),
-    Prefix = "Line " ++ wf:to_list(LineNum) ++ "│ ",
+    Prefix = "Line " ++ integer_to_list(LineNum) ++ "│ ",
     PrefixLen = length(Prefix),
     %Arrow = "↑",
     %Arrow = "🠉",
