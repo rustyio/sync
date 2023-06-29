@@ -10,6 +10,6 @@ case erlang:function_exported(rebar3, main, 1) of
         %% profiles
         [{deps, [
             {fs, "", {git, "https://github.com/synrc/fs", {tag, "6.1"}}},
-            {nitrogen_core, "", {git, "https://github.com/nitrogen/nitrogen_core", {tag, "2.4.0"}}}
+            {nitrogen_core, "", {git, "https://github.com/nitrogen/nitrogen_core", {tag, "v2.4.0"}}}
         ]} | lists:keydelete(deps, 1, CONFIG)]
 end.
