@@ -66,7 +66,7 @@ log_warnings(Message) ->
 %%% PRIVATE FUNCTIONS %%%
 
 growl(Image, Title, Message) ->
-    ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "icons", Image]) ++ ".png",
+    ImagePath = filename:join([filename:dirname(code:which(sync)), "..", "priv", "icons", Image]) ++ ".png",
     Cmd = case sync_utils:get_env(executable, auto) of
               auto ->
                   case os:type() of
