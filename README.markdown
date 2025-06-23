@@ -14,31 +14,48 @@ recompiles the code, and reloads the module.
 
 ## How can I use Sync?
 
-### Install via rebar dependency
+### Add as a rebar dependency
+
+#### Rebar 3
 
 ```erlang
 {deps, [
-		{sync, ".*",
-			{git, "https://github.com/rustyio/sync.git", {branch, "master"}}}
+    sync
 ]}.
 ```
 
-### Manual install
+To auto-start with rebar3: `rebar3 shell --eval "sync:go"."`
+
+#### Rebar 2.x
+
+```erlang
+{deps, [
+  {sync, ".*",
+   {git, "https://github.com/rustyio/sync.git", {branch, "master"}}}
+]}.
+```
+
+To auto-start with rebar2, edit your `etc/vm.args` and add:
+
+```bash
+-eval "sync:go()"
+```
+
+````
+
+### Manual system-wide install
 
 ```bash
 cd $ERL_LIBS
 git clone git@github.com:rustyio/sync.git
 (cd sync; make)
-```
+````
 
-The recommended approach is to put sync in your `$ERL_LIBS` directory.
+The recommended approach for system-wide install is to put sync in your
+`$ERL_LIBS` directory.
 
 Then, go in the Erlang console of an application you are developing, run
-`sync:go().`. You can also start sync using `application:start(sync).` but this
-will require you to have `sync`'s dependencies started as well: `syntax_tools`
-and `compiler`.
-
-It's generally just recommended to do `sync:go().`
+`sync:go().`. You can also start sync using `application:ensure_all_started(sync).`
 
 Starting up:
 
@@ -77,8 +94,8 @@ You can stop the `sync` application entirely (wiping its internal state) with
 `sync:stop()`. You can then restart the application with a new state using `sync:go()`
 
 If, however, you would rather pause `sync` so that it will not update anything
-during some period, you can pause the scanner with `sync:pause()`.  You might
-do this while upgrading you wish not to have immediately loaded until
+during some period, you can pause the scanner with `sync:pause()`. You might
+do this while upgrading and you wish not to have immediately loaded until
 everything is complete. Calling `sync:go()` once again will unpause the scanner.
 
 Bear in mind that running `pause()` will not stop files that are currently
@@ -95,17 +112,21 @@ To your erlang `config` add
     ]}
 ].
 ```
+
 ```erlang
 -type strategy() :: add | replace.
-````
+```
+
 If `strategy()` is `replace`, sync will use ONLY specified dirs to sync. If `strategy()` is `add`, sync will add specific dirs to list of dirs to sync.
 
 ```erlang
 -type src_dir_descr() :: { Dir :: file:filename(), [Options :: compile_option()]}.
 ```
+
 You probably want to specify `outdir` compile option.
 
 For example
+
 ```erlang
 [
     {sync, [
@@ -117,36 +138,36 @@ For example
 ## Console Logging
 
 By default, sync will print sucess / warning / failure notifications to the
-erlang console.  You can control this behaviour with the `log` configuration options.
+erlang console. You can control this behaviour with the `log` configuration options.
 
 ### Valid Values For `log`
 
-* `all`: Print all console notifications
-* `none`: Print no console notifications
-* `[success | warnings | errors]`: A list of any combination of the atoms
-  `success`, `warnings`, or `errors`.  Example: `[warnings, errors]` will only
+- `all`: Print all console notifications
+- `none`: Print no console notifications
+- `[success | warnings | errors]`: A list of any combination of the atoms
+  `success`, `warnings`, or `errors`. Example: `[warnings, errors]` will only
   show warnings and errors, but suppress success messages.
-* `true`: An alias to `all`, kept for backwards compatibility
-* `false`: An alias to `none`, kept for backwards compatibility
-* `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
+- `true`: An alias to `all`, kept for backwards compatibility
+- `false`: An alias to `none`, kept for backwards compatibility
+- `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
 
 The `log` value can be specified in any of the following ways:
 
 #### 1. Loaded from a .config file
 
-	{log, all},
-	{log, [success, warnings]},
+    {log, all},
+    {log, [success, warnings]},
 
-#### 2. As an environment variable called from the erlang command line:
+#### 2. As an environment variable called from the erlang command line
 
-	erl -sync log all
-	erl -sync log none
+    erl -sync log all
+    erl -sync log none
 
-#### 3. From within the Erlang shell:
+#### 3. From within the Erlang shell
 
-	sync:log(all);
-	sync:log(none);
-	sync:log([errors, warnings]);
+    sync:log(all);
+    sync:log(none);
+    sync:log([errors, warnings]);
 
 ## Desktop Notifications
 
@@ -155,7 +176,6 @@ keep you informed of compliation results. All major operating systems are
 supported: Mac via [Growl](http://growl.info), Linux via Libnotify, Windows via
 [Notifu](http://www.paralint.com/projects/notifu/) and Emacs via lwarn /
 message command. Below are Growl screenshots.
-
 
 Success:
 
@@ -176,32 +196,32 @@ and can be selectively enabled or disabled with the `growl` configuration variab
 
 ### Valid Values For `growl`
 
-* `all`: Print all console notifications
-* `none`: Print no console notifications
-* `[success | warnings | errors]`: A list of any combination of the atoms
-  `success`, `warnings`, or `errors`.  Example: `[warnings, errors]` will only
+- `all`: Print all console notifications
+- `none`: Print no console notifications
+- `[success | warnings | errors]`: A list of any combination of the atoms
+  `success`, `warnings`, or `errors`. Example: `[warnings, errors]` will only
   show warnings and errors, but suppress success messages.
-* `true`: An alias to `all`, kept for backwards compatibility
-* `false`: An alias to `none`, kept for backwards compatibility
-* `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
+- `true`: An alias to `all`, kept for backwards compatibility
+- `false`: An alias to `none`, kept for backwards compatibility
+- `skip_success`: An alias to `[errors, warnings]`, kept for backwards compatibility.
 
 The `growl` value can be specified in any of the following ways:
 
 #### 1. Loaded from a .config file
 
-	{growl, all},
-	{growl, [success, warnings]},
+    {growl, all},
+    {growl, [success, warnings]},
 
-#### 2. As an environment variable called from the erlang command line:
+#### 2. As an environment variable called from the erlang command line
 
-	erl -sync growl all
-	erl -sync growl none
+    erl -sync growl all
+    erl -sync growl none
 
-#### 3. From within the Erlang shell:
+#### 3. From within the Erlang shell
 
-	sync:growl(all);
-	sync:growl(none);
-	sync:growl([errors, warnings]);
+    sync:growl(all);
+    sync:growl(none);
+    sync:growl([errors, warnings]);
 
 ### Troubleshooting Growl Notifications
 
@@ -211,15 +231,16 @@ Sync attempts to auto-detect the notification package to use via the
 If this isn't working for you, or you would like to override the default, use
 the `executable` configuration parameter:
 
-	{executable, TYPE}
+    {executable, TYPE}
 
 Where `TYPE` is:
-+ `'auto'` Autodetermine (default behaviour)
-+ `'growlnotify'` for Mac / Growl.
-+ `'notification_center'` for Mac OS X built-in Notification Center.
-+ `'notify-send'` for Linux / libnotify.
-+ `'notifu'` for Windows / Notifu.
-+ `'emacsclient'` for Emacs notifications.
+
+- `'auto'` Autodetermine (default behaviour)
+- `'growlnotify'` for Mac / Growl.
+- `'notification_center'` for Mac OS X built-in Notification Center.
+- `'notify-send'` for Linux / libnotify.
+- `'notifu'` for Windows / Notifu.
+- `'emacsclient'` for Emacs notifications.
 
 Like all configuration parameters, this can also be specified when launching
 Erlang with:
@@ -275,8 +296,8 @@ You can register a post-hook with:
 
 ```erlang
 sync:onsync(fun(Mods) ->
-				io:format("Reloaded Modules: ~p~n",[Mods])
-			end).
+    io:format("Reloaded Modules: ~p~n",[Mods])
+   end).
 ```
 
 This will simply print the list of modules that were successfully recompiled.
@@ -286,7 +307,7 @@ module that has a `test()` function exported, you could do the following:
 
 ```erlang
 RunTests = fun(Mods) ->
-	[Mod:test() || Mod <- Mods, erlang:function_exported(Mod, test, 0)]
+ [Mod:test() || Mod <- Mods, erlang:function_exported(Mod, test, 0)]
 end,
 sync:onsync(RunTests).
 ```
@@ -294,13 +315,13 @@ sync:onsync(RunTests).
 A post-hook can also be specified as a `{Module,Function}` tuple, which assumes
 `Module:Function/1`
 
-*Note:* Currently, only one post-hook can be registered at a time.
+_Note:_ Currently, only one post-hook can be registered at a time.
 
 ### Unregistering a post-hook
 
 To unregister a post-hook, call
 
-	sync:clear_onsync().
+    sync:clear_onsync().
 
 ### Registering Automatic Tests
 
@@ -320,11 +341,15 @@ from being scanned by sync. To achive this modify `whitelisted_modules` or
 Beyond specifying modules one by one, identified by atoms, you can also specify
 them in bulk, identified by regular expressions, but with a slower sync.
 
+Even further, you may wish to prevent the scanner from searching for files in
+entire directory structures that could bog down the scanner. For this, you can
+modify the `excluded_paths` configuration parameter.
+
 ## Moving Application Location
 
 Previously, if an entire application (like a reltool-generated release) was
 moved from one location to another, sync would fail to recompile files that
-were changed until all the beams were remade.  While this is typically as
+were changed until all the beams were remade. While this is typically as
 simple as typing `rebar compile`, it was still a hassle.
 
 The solution to this was to enable the ability for sync to "heal" the paths
@@ -332,19 +357,19 @@ when it turned out they had been moved.
 
 The way this works is by checking if the `source` path inside the beam is a
 file that exists, and by checking if that path is a descendant of the root of
-your application.  If sync has been set to fix the paths, and module's source
+your application. If sync has been set to fix the paths, and module's source
 is pointing at a path that isn't a descendant of the current working directory,
 it will attempt to find the correct file.
 
 You can change how this will be handled with a `non_descendants` setting in the
 config:
 
-* `fix`: Fix any file that isn't a descendant
+- `fix`: Fix any file that isn't a descendant
 
-* `allow`: Use the original path in the module, regardless of its location,
+- `allow`: Use the original path in the module, regardless of its location,
   recompiling only if the original location changes.
 
-* `ignore`: If a file is not a descendant, sync will completely ignore it.
+- `ignore`: If a file is not a descendant, sync will completely ignore it.
 
 ## Sample Configuration File
 
@@ -352,14 +377,14 @@ Please note that sync loads with the following defaults:
 
 ```erlang
 [
-	{sync, [
-		{growl, all},
-		{log, all},
-		{non_descendants, fix},
-		{executable, auto},
-		{whitelisted_modules, []},
-		{excluded_modules, []}
-	]}
+ {sync, [
+  {growl, all},
+  {log, all},
+  {non_descendants, fix},
+  {executable, auto},
+  {whitelisted_modules, []},
+  {excluded_modules, []}
+ ]}
 ].
 ```
 
@@ -368,4 +393,4 @@ You can view a full sample configuration file
 that you're free to include in your application. Remember to use the
 `-config` switch for the `erl` program:
 
-	erl -config sync.config
+    erl -config sync.config

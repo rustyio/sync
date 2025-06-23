@@ -274,9 +274,20 @@ process_queue_item(discover_src_files, State) ->
 
     %% For each include dir, get a list of hrl files...
     Fhrl = fun(X, Acc) ->
-        sync_utils:wildcard(X, ".*\\.hrl$") ++ Acc
+        {_FFTime, Fhrls} = timer:tc(fun() -> sync_utils:wildcard(X, ".*\\.hrl$") end),
+        %case FFTime > 100000 of
+        %    true ->
+        %        _FFSecs = FFTime/1000000,
+        %        %?PRINT({hrl_dir_search, _FFSecs, X});
+        %    _ ->
+        %        ok
+        %end,
+        Fhrls ++ Acc
     end,
+    %?PRINT({hrl_dirs_to_search, State#state.hrl_dirs}),
     {_HrlTime, HrlFiles} = timer:tc(fun() -> lists:usort(lists:foldl(Fhrl, [], State#state.hrl_dirs)) end),
+
+    %?PRINT({_ErlTime, _HrlTime}),
 
     %% Schedule the next interval...
     NewTimers = case State#state.sync_method of
@@ -580,7 +591,7 @@ lfe_compile(SrcFile, Options) ->
 
 maybe_recompile_src_file(File, LastMod, EnablePatching) ->
     Module = list_to_atom(filename:basename(File, ".erl")),
-    file:write_file("recompile.log", ["Checking ",atom_to_list(Module),"\n"], [append]),
+    %file:write_file("recompile.log", ["Checking ",atom_to_list(Module),"\n"], [append]),
     case code:which(Module) of
         BeamFile when is_list(BeamFile) ->
             %% check with beam file
@@ -1062,11 +1073,12 @@ discover_source_dirs(State, ExtraDirs, ReplaceDirs) ->
                             %% Get the options, store under the dir...
                             {ok, Options} = sync_utils:get_options_from_module(X),
                             %% Store the options for later reference...
-                            HrlDir = proplists:get_all_values(i, Options),
+                            HrlDirs = proplists:get_all_values(i, Options),
+                            %?PRINT({X, HrlDirs}),
 
                             sync_options:set_options(SrcDir, Options),
                             %% Return the dir...
-                            {[SrcDir|SrcAcc], HrlDir ++ HrlAcc};
+                            {[SrcDir|SrcAcc], HrlDirs ++ HrlAcc};
                         _ ->
                             Acc
                     end;
@@ -1075,8 +1087,10 @@ discover_source_dirs(State, ExtraDirs, ReplaceDirs) ->
             end
     end,
     {SrcDirs, HrlDirs} = lists:foldl(F, {ExtraDirs, []}, State#state.modules),
+
     USortedSrcDirs = lists:usort(SrcDirs),
     USortedHrlDirs = lists:usort(HrlDirs),
+    %?PRINT(USortedHrlDirs),
     %% InitialDirs = sync_utils:initial_src_dirs(),
 
     %% Schedule the next interval...

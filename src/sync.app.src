@@ -2,7 +2,7 @@
 {application, sync, [
     {description, "Sync - Automatic Code Reloader"},
     {applications, [kernel, stdlib, syntax_tools, compiler]},
-    {vsn, "0.4.1"},
+    {vsn, "0.5.0"},
     {registered, []},
     {mod, { sync, []}},
     {licenses, ["MIT"]},

@@ -8,6 +8,7 @@
          wildcard/2,
          whitelisted_modules/0,
          excluded_modules/0,
+         excluded_paths/0,
          get_env/2,
          set_env/2,
          file_last_modified_time/1,
@@ -37,6 +38,7 @@ get_src_dir_from_module(Module)->
                 %% how to deal with that
 
                 IsFile = filelib:is_regular(Source),
+                %io:format("Checking: ~p (~p)~n",[Module, Source]),
                 IsDecendant = is_path_decendent(Source),
                 NonDecendants = get_env(non_descendants, fix),
                 Source2 = case {IsFile, IsDecendant, NonDecendants} of
@@ -272,16 +274,76 @@ get_src_dir(Dir, Ctr) ->
         true -> get_src_dir(filename:dirname(Dir), Ctr - 1)
     end.
 
-%% @private Return all files in a directory matching a regex.
+%% @private Return all files and subfiles in a directory matching a regex.
 wildcard(Dir, Regex) ->
-    filelib:fold_files(Dir, Regex, true, fun(Y, Acc1) -> [Y|Acc1] end, []).
+    IgnorePaths = excluded_paths(),
+    wildcard(Dir, Regex, IgnorePaths).
 
+wildcard(Dir, Regex, IgnorePaths) ->
+    %% Tag all files in the provided Dir with either {file,_} or {dir,_}
+    %% This is used instead of filelib:fold_files because it does not support
+    %% the IgnorePaths option. This function immediately terminates any more
+    %% searching if the IgnorePaths Regex matches.
+    {ok, AllFiles} = file:list_dir(Dir),
+    TaggedFiles = lists:filtermap(fun(File) ->
+        FullPath = filename:join(Dir, File),
+        case wildcard_file_or_dir(FullPath, Regex, IgnorePaths) of
+            ignore ->
+                false;
+            Type ->
+                {true, {Type, FullPath}}
+        end
+    end, AllFiles),
+
+    %io:format("TaggedFiles:~n~p~n",[TaggedFiles]),
+
+    %% With the list of tagged files, it's time to dive deeper for directories,
+    %% so we recurse for any {dir,_} item.
+    DeeperFiles = lists:foldl(fun
+        ({file, File}, Acc) ->
+            [File | Acc];
+        ({dir, DeeperDir}, Acc) ->
+            wildcard(DeeperDir, Regex, IgnorePaths) ++ Acc
+    end, [], TaggedFiles),
+    DeeperFiles.
+
+wildcard_file_or_dir(Path, FileRegex, IgnorePaths) ->
+    case does_dir_match(Path, IgnorePaths) of
+        true ->
+            %io:format("SKIPPING (Matches IgnorePaths): ~s~n", [Path]),
+            ignore;
+        false ->
+            case filelib:is_regular(Path) of
+                true ->
+                    case re:run(Path, FileRegex, [{capture, none}, unicode]) of
+                        match -> file;
+                        nomatch ->
+                            %io:format("SKIPPING (is file that doesn't match ~s): ~s~n",[FileRegex, Path]),
+                            ignore
+                    end;
+                false ->
+                    case filelib:is_dir(Path) of
+                        true -> dir;
+                        false ->
+                            %io:format("SKIPPING (unknown file type): ~s~n",[Path]),
+                            ignore
+                    end
+            end
+    end.
+
+does_dir_match(Dir, REs) ->
+    lists:any(fun(Regex) ->
+        re:run(Dir, Regex, [{capture, none}, unicode]) == match
+    end, REs).
 
 whitelisted_modules() ->
     get_env(whitelisted_modules, []).
 
 excluded_modules() ->
     get_env(excluded_modules, []).
+
+excluded_paths() ->
+    get_env(excluded_paths, []).
 
 %% @private Get an environment variable.
 get_env(Var, Default) ->
