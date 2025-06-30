@@ -284,16 +284,20 @@ wildcard(Dir, Regex, IgnorePaths) ->
     %% This is used instead of filelib:fold_files because it does not support
     %% the IgnorePaths option. This function immediately terminates any more
     %% searching if the IgnorePaths Regex matches.
-    {ok, AllFiles} = file:list_dir(Dir),
-    TaggedFiles = lists:filtermap(fun(File) ->
-        FullPath = filename:join(Dir, File),
-        case wildcard_file_or_dir(FullPath, Regex, IgnorePaths) of
-            ignore ->
-                false;
-            Type ->
-                {true, {Type, FullPath}}
-        end
-    end, AllFiles),
+    TaggedFiles = case file:list_dir(Dir) of
+        {ok, AllFiles} ->
+            lists:filtermap(fun(File) ->
+                FullPath = filename:join(Dir, File),
+                case wildcard_file_or_dir(FullPath, Regex, IgnorePaths) of
+                    ignore ->
+                        false;
+                    Type ->
+                        {true, {Type, FullPath}}
+                end
+            end, AllFiles);
+        {error, _} ->
+            []
+    end,
 
     %io:format("TaggedFiles:~n~p~n",[TaggedFiles]),
 
